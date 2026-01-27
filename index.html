@@ -31,7 +31,7 @@
         .login-page.hide { display: none; }
         
         .header { background: linear-gradient(135deg, #d97706, #ea580c); color: white; padding: 1rem; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .header-content { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
+        .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; }
         .logo { display: flex; align-items: center; gap: 0.5rem; }
         .logo h1 { font-size: 1.3rem; }
         .logo p { font-size: 0.7rem; opacity: 0.9; }
@@ -48,19 +48,19 @@
         .btn-outline { background: white; border: 2px solid #fcd34d; color: #92400e; }
         
         .tabs { background: white; border-bottom: 2px solid #fde68a; position: sticky; top: 60px; z-index: 90; }
-        .tabs-content { max-width: 1200px; margin: 0 auto; display: flex; }
+        .tabs-content { max-width: 1400px; margin: 0 auto; display: flex; }
         .tab-btn { flex: 1; padding: 1rem; border: none; background: transparent; font-family: inherit; font-weight: 600; cursor: pointer; color: #6b7280; border-bottom: 3px solid transparent; transition: all 0.2s; }
         .tab-btn:hover { background: #fffbeb; }
         .tab-btn.active { color: #d97706; border-bottom-color: #d97706; background: #fffbeb; }
         
-        .main { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+        .main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         
-        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
-        .sum-card { background: white; border-radius: 12px; padding: 1rem; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-        .sum-card .label { font-size: 0.7rem; color: #6b7280; }
-        .sum-card .value { font-size: 1.3rem; font-weight: 700; color: #d97706; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+        .sum-card { background: white; border-radius: 12px; padding: 0.8rem; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+        .sum-card .label { font-size: 0.65rem; color: #6b7280; }
+        .sum-card .value { font-size: 1.2rem; font-weight: 700; color: #d97706; }
         .sum-card.green .value { color: #059669; }
         .sum-card.blue .value { color: #2563eb; }
         .sum-card.red .value { color: #dc2626; }
@@ -82,13 +82,13 @@
         .plat-btn:hover { border-color: #fcd34d; }
         .plat-btn.active { border-color: #f59e0b; background: #fef3c7; }
         
-        table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-        th, td { padding: 0.5rem 0.4rem; text-align: left; border-bottom: 1px solid #fef3c7; }
-        th { background: #fef3c7; font-weight: 600; color: #92400e; font-size: 0.7rem; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.7rem; }
+        th, td { padding: 0.4rem 0.3rem; text-align: left; border-bottom: 1px solid #fef3c7; }
+        th { background: #fef3c7; font-weight: 600; color: #92400e; font-size: 0.65rem; position: sticky; top: 0; }
         tr:hover { background: #fffbeb; }
         .low-stock { background: #fee2e2 !important; }
         
-        .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 10px; font-size: 0.65rem; font-weight: 500; }
+        .badge { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 10px; font-size: 0.55rem; font-weight: 500; }
         .badge-meesho { background: #fdf2f8; color: #be185d; }
         .badge-amazon { background: #fff7ed; color: #c2410c; }
         .badge-flipkart { background: #eff6ff; color: #1d4ed8; }
@@ -97,15 +97,16 @@
         .badge-rto { background: #fee2e2; color: #991b1b; }
         .badge-pending { background: #fef3c7; color: #92400e; }
         
-        .act-btn { padding: 0.3rem 0.5rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.75rem; margin: 0 1px; transition: all 0.2s; }
+        .act-btn { padding: 0.2rem 0.35rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.65rem; margin: 0 1px; transition: all 0.2s; }
         .act-btn:hover { transform: scale(1.1); }
         .act-btn.edit { background: #dbeafe; color: #1e40af; }
         .act-btn.del { background: #fee2e2; color: #991b1b; }
         
-        .qty-input { width: 60px; padding: 0.25rem; border: 1px solid #fcd34d; border-radius: 4px; text-align: center; font-size: 0.8rem; }
+        .qty-input { width: 50px; padding: 0.2rem; border: 1px solid #fcd34d; border-radius: 4px; text-align: center; font-size: 0.7rem; }
+        .remark-select { width: 90px; padding: 0.15rem; border: 1px solid #fcd34d; border-radius: 4px; font-size: 0.6rem; background: white; }
         
-        .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
-        .filter-btn { padding: 0.4rem 0.8rem; border: 2px solid #fde68a; border-radius: 15px; background: white; cursor: pointer; font-size: 0.75rem; transition: all 0.2s; }
+        .filters { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+        .filter-btn { padding: 0.3rem 0.6rem; border: 2px solid #fde68a; border-radius: 15px; background: white; cursor: pointer; font-size: 0.65rem; transition: all 0.2s; }
         .filter-btn:hover { border-color: #f59e0b; }
         .filter-btn.active { background: #f59e0b; color: white; border-color: #f59e0b; }
         
@@ -120,12 +121,12 @@
         .modal-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; }
         .modal-body { padding: 1rem; }
         
-        .upload-box { border: 3px dashed #fcd34d; border-radius: 12px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .upload-box { border: 3px dashed #fcd34d; border-radius: 12px; padding: 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; }
         .upload-box:hover { border-color: #f59e0b; background: #fffbeb; }
         .upload-box input { display: none; }
-        .upload-box p { color: #6b7280; margin-top: 0.5rem; font-size: 0.85rem; }
+        .upload-box p { color: #6b7280; margin-top: 0.5rem; font-size: 0.8rem; }
         
-        .alert { padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem; font-size: 0.85rem; }
+        .alert { padding: 0.75rem; border-radius: 10px; margin-bottom: 1rem; font-size: 0.8rem; }
         .alert-danger { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; }
         .alert-success { background: #d1fae5; border: 1px solid #6ee7b7; color: #065f46; }
         
@@ -133,18 +134,21 @@
         .status-bar.error { background: #991b1b; }
         .status-bar.syncing { background: #2563eb; }
         
-        @media (max-width: 600px) {
+        .product-cell { max-width: 150px; }
+        .product-short { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
+        
+        @media (max-width: 768px) {
             .form-row { flex-direction: column; }
             .form-grp { min-width: 100%; }
             .summary { grid-template-columns: 1fr 1fr; }
-            th, td { padding: 0.4rem 0.2rem; font-size: 0.7rem; }
-            .header h1 { font-size: 1.1rem; }
-            .login-box { margin: 0.5rem; }
+            th, td { padding: 0.25rem 0.15rem; font-size: 0.6rem; }
+            .header h1 { font-size: 1rem; }
+            .product-cell { max-width: 70px; }
+            .remark-select { width: 65px; }
         }
     </style>
 </head>
 <body>
-    <!-- LOGIN PAGE -->
     <div class="login-page" id="loginPage">
         <div class="login-box">
             <div class="login-header">
@@ -154,20 +158,13 @@
             </div>
             <div class="login-body">
                 <div class="login-error" id="loginError"></div>
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="loginEmail" placeholder="your@email.com">
-                </div>
-                <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" id="loginPassword" placeholder="••••••••">
-                </div>
+                <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="your@email.com"></div>
+                <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
                 <button class="login-btn" id="loginBtn" onclick="doLogin()">Login</button>
             </div>
         </div>
     </div>
 
-    <!-- MAIN APP -->
     <div class="app-container" id="appContainer">
         <div class="status-bar" id="statusBar">🔄 Connecting...</div>
         
@@ -180,8 +177,8 @@
                 <div class="header-btns">
                     <span class="user-info" id="userEmail"></span>
                     <button class="btn btn-light" onclick="exportData()">📥 Export</button>
-                    <button class="btn btn-light" onclick="refreshData()">🔄 Refresh</button>
-                    <button class="btn btn-light" onclick="doLogout()">🚪 Logout</button>
+                    <button class="btn btn-light" onclick="refreshData()">🔄</button>
+                    <button class="btn btn-light" onclick="doLogout()">🚪</button>
                 </div>
             </div>
         </header>
@@ -195,7 +192,6 @@
         </nav>
         
         <main class="main">
-            <!-- DASHBOARD -->
             <div class="tab-content active" id="tab-dashboard">
                 <div class="summary">
                     <div class="sum-card"><div class="label">Stock Value</div><div class="value" id="d-stock">₹0</div></div>
@@ -206,60 +202,43 @@
                 </div>
                 <div id="alertBox"></div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-                    <div class="card">
-                        <div class="card-header">📦 Low Stock Items</div>
-                        <div class="card-body" id="dashLow"><div class="loading">Loading...</div></div>
-                    </div>
-                    <div class="card">
-                        <div class="card-header">🕐 Recent Orders</div>
-                        <div class="card-body" id="dashRecent"><div class="loading">Loading...</div></div>
-                    </div>
+                    <div class="card"><div class="card-header">📦 Low Stock</div><div class="card-body" id="dashLow"><div class="loading">Loading...</div></div></div>
+                    <div class="card"><div class="card-header">🕐 Recent Orders</div><div class="card-body" id="dashRecent"><div class="loading">Loading...</div></div></div>
                 </div>
             </div>
             
-            <!-- STOCK -->
             <div class="tab-content" id="tab-stock">
                 <div class="form-box">
                     <h4>➕ Add Stock Item</h4>
                     <div class="form-row">
                         <div class="form-grp"><label>Product Name *</label><input type="text" id="s-name" placeholder="Glass Bangles"></div>
                         <div class="form-grp" style="max-width:100px"><label>Size *</label>
-                            <select id="s-size">
-                                <option>2.0</option><option>2.1</option><option>2.2</option><option>2.3</option>
-                                <option selected>2.4</option><option>2.5</option><option>2.6</option><option>2.7</option>
-                                <option>2.8</option><option>2.9</option><option>2.10</option><option>2.11</option><option>2.12</option>
-                            </select>
+                            <select id="s-size"><option>2.0</option><option>2.1</option><option>2.2</option><option>2.3</option><option selected>2.4</option><option>2.5</option><option>2.6</option><option>2.7</option><option>2.8</option><option>2.9</option><option>2.10</option><option>2.11</option><option>2.12</option></select>
                         </div>
                         <div class="form-grp"><label>Quantity *</label><input type="number" id="s-qty" min="0" placeholder="100"></div>
-                        <div class="form-grp"><label>Cost Price ₹ *</label><input type="number" id="s-cost" min="0" step="0.01" placeholder="50"></div>
-                        <div class="form-grp"><label>Sell Price ₹ *</label><input type="number" id="s-price" min="0" step="0.01" placeholder="100"></div>
+                        <div class="form-grp"><label>Cost ₹ *</label><input type="number" id="s-cost" min="0" step="0.01" placeholder="50"></div>
+                        <div class="form-grp"><label>Price ₹ *</label><input type="number" id="s-price" min="0" step="0.01" placeholder="100"></div>
                     </div>
-                    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.5rem">
-                        <button class="btn btn-primary" id="addStockBtn">➕ Add Item</button>
-                    </div>
+                    <div style="text-align:right;margin-top:0.5rem"><button class="btn btn-primary" id="addStockBtn">➕ Add</button></div>
                 </div>
-                
                 <div class="card">
-                    <div class="card-header"><span>📦 Stock List (<span id="stockCnt">0</span>)</span></div>
-                    <div style="overflow-x:auto">
-                        <table>
-                            <thead><tr><th>Product</th><th>Size</th><th style="text-align:center">Qty</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Value</th><th>Actions</th></tr></thead>
-                            <tbody id="stockTbl"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div class="card-header"><span>📦 Stock (<span id="stockCnt">0</span>)</span></div>
+                    <div style="overflow-x:auto"><table>
+                        <thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Cost</th><th>Price</th><th>Value</th><th>Act</th></tr></thead>
+                        <tbody id="stockTbl"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+                    </table></div>
                 </div>
             </div>
             
-            <!-- ORDERS -->
             <div class="tab-content" id="tab-orders">
                 <div class="form-box">
-                    <h4>📊 Import Meesho Excel</h4>
+                    <h4>📊 Import Meesho File (Excel or CSV)</h4>
                     <div class="upload-box" onclick="document.getElementById('excelFile').click()">
-                        <div style="font-size:2.5rem">📁</div>
-                        <p><strong>Click to upload Meesho Excel file</strong><br>or drag and drop here</p>
-                        <input type="file" id="excelFile" accept=".xlsx,.xls" onchange="handleExcelUpload(this)">
+                        <div style="font-size:2rem">📁</div>
+                        <p><strong>Click to upload</strong><br>Excel (.xlsx) or CSV (.csv)</p>
+                        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" onchange="handleFileUpload(this)">
                     </div>
-                    <div id="importStatus" style="margin-top:1rem"></div>
+                    <div id="importStatus" style="margin-top:0.75rem"></div>
                 </div>
                 
                 <div class="form-box">
@@ -267,38 +246,23 @@
                     <div class="form-row">
                         <div class="form-grp"><label>Order ID *</label><input type="text" id="o-id" placeholder="MS12345"></div>
                         <div class="form-grp"><label>Customer</label><input type="text" id="o-cust" placeholder="Name"></div>
+                        <div class="form-grp"><label>State</label><input type="text" id="o-state" placeholder="Delhi"></div>
                         <div class="form-grp"><label>Date</label><input type="date" id="o-date"></div>
                     </div>
                     <div class="form-row">
-                        <div class="form-grp" style="flex:2">
-                            <label>Select Item *</label>
-                            <select id="o-item">
-                                <option value="">-- Select from stock --</option>
-                            </select>
+                        <div class="form-grp" style="flex:2"><label>Item *</label><select id="o-item"><option value="">-- Select --</option></select></div>
+                        <div class="form-grp" style="max-width:80px"><label>Size *</label>
+                            <select id="o-size"><option>2.0</option><option>2.1</option><option>2.2</option><option>2.3</option><option selected>2.4</option><option>2.5</option><option>2.6</option><option>2.7</option><option>2.8</option><option>2.9</option><option>2.10</option><option>2.11</option><option>2.12</option></select>
                         </div>
-                        <div class="form-grp" style="max-width:100px">
-                            <label>Size *</label>
-                            <select id="o-size">
-                                <option>2.0</option><option>2.1</option><option>2.2</option><option>2.3</option>
-                                <option selected>2.4</option><option>2.5</option><option>2.6</option><option>2.7</option>
-                                <option>2.8</option><option>2.9</option><option>2.10</option><option>2.11</option><option>2.12</option>
-                            </select>
-                        </div>
-                        <div class="form-grp" style="max-width:80px"><label>Qty *</label><input type="number" id="o-qty" min="1" value="1"></div>
-                        <div class="form-grp"><label>Amount ₹ *</label><input type="number" id="o-amt" min="0" placeholder="500"></div>
+                        <div class="form-grp" style="max-width:60px"><label>Qty *</label><input type="number" id="o-qty" min="1" value="1"></div>
+                        <div class="form-grp"><label>Amount ₹ *</label><input type="number" id="o-amt" min="0"></div>
                         <div class="form-grp"><label>Received ₹</label><input type="number" id="o-recv" value="0" min="0"></div>
                     </div>
                     <div class="form-row">
-                        <div class="form-grp" style="max-width:150px">
-                            <label>Status</label>
-                            <select id="o-status">
-                                <option value="Pending">Pending</option>
-                                <option value="Delivered">Delivered</option>
-                                <option value="RTO">RTO</option>
-                            </select>
+                        <div class="form-grp" style="max-width:120px"><label>Status</label>
+                            <select id="o-status"><option value="Pending">Pending</option><option value="Delivered">Delivered</option><option value="RTO">RTO</option></select>
                         </div>
-                        <div class="form-grp">
-                            <label>Platform</label>
+                        <div class="form-grp"><label>Platform</label>
                             <div class="platform-btns" style="margin-top:0.25rem">
                                 <span class="plat-btn active" data-p="meesho">🛍️ Meesho</span>
                                 <span class="plat-btn" data-p="amazon">📦 Amazon</span>
@@ -307,37 +271,32 @@
                             </div>
                         </div>
                     </div>
-                    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.5rem">
-                        <button class="btn btn-primary" id="addOrderBtn">➕ Add Order</button>
-                    </div>
+                    <div style="text-align:right;margin-top:0.5rem"><button class="btn btn-primary" id="addOrderBtn">➕ Add</button></div>
                 </div>
                 
                 <div class="filters">
-                    <span style="font-size:0.75rem;color:#6b7280">Platform:</span>
+                    <span style="font-size:0.65rem;color:#6b7280">Platform:</span>
                     <button class="filter-btn active" data-f="all">All</button>
                     <button class="filter-btn" data-f="meesho">Meesho</button>
                     <button class="filter-btn" data-f="amazon">Amazon</button>
                     <button class="filter-btn" data-f="flipkart">Flipkart</button>
-                    <span style="margin-left:1rem;font-size:0.75rem;color:#6b7280">Status:</span>
-                    <button class="filter-btn" data-s="Delivered">Delivered</button>
-                    <button class="filter-btn" data-s="RTO">RTO</button>
-                    <button class="filter-btn" data-s="Pending">Pending</button>
+                    <span style="margin-left:0.5rem;font-size:0.65rem;color:#6b7280">Status:</span>
+                    <button class="filter-btn" data-s="Delivered">✅</button>
+                    <button class="filter-btn" data-s="RTO">🔄</button>
+                    <button class="filter-btn" data-s="Pending">⏳</button>
                 </div>
                 
                 <div class="card">
                     <div class="card-header"><span>🛒 Orders (<span id="ordCnt">0</span>)</span></div>
-                    <div style="overflow-x:auto">
-                        <table>
-                            <thead><tr><th>Order ID</th><th>Product</th><th>Size</th><th>Qty</th><th>Platform</th><th>Status</th><th>Date</th><th style="text-align:right">Amount</th><th style="text-align:right">Received</th><th>Actions</th></tr></thead>
-                            <tbody id="ordTbl"><tr><td colspan="10" class="loading">Loading...</td></tr></tbody>
-                        </table>
-                    </div>
+                    <div style="overflow-x:auto;max-height:450px"><table>
+                        <thead><tr><th>Order ID</th><th>Product</th><th>SKU/Stock</th><th>Size</th><th>Qty</th><th>State</th><th>Platform</th><th>Status</th><th>Date</th><th>Amount</th><th>Received</th><th>X</th></tr></thead>
+                        <tbody id="ordTbl"><tr><td colspan="12" class="loading">Loading...</td></tr></tbody>
+                    </table></div>
                 </div>
             </div>
         </main>
     </div>
     
-    <!-- Edit Stock Modal -->
     <div class="modal-bg" id="editModal">
         <div class="modal">
             <div class="modal-head"><h3>✏️ Edit Stock</h3><button class="modal-close" onclick="closeModal()">×</button></div>
@@ -345,13 +304,7 @@
                 <input type="hidden" id="edit-id">
                 <div class="form-group"><label>Product Name</label><input type="text" id="edit-name"></div>
                 <div class="form-row">
-                    <div class="form-grp"><label>Size</label>
-                        <select id="edit-size">
-                            <option>2.0</option><option>2.1</option><option>2.2</option><option>2.3</option>
-                            <option>2.4</option><option>2.5</option><option>2.6</option><option>2.7</option>
-                            <option>2.8</option><option>2.9</option><option>2.10</option><option>2.11</option><option>2.12</option>
-                        </select>
-                    </div>
+                    <div class="form-grp"><label>Size</label><select id="edit-size"><option>2.0</option><option>2.1</option><option>2.2</option><option>2.3</option><option>2.4</option><option>2.5</option><option>2.6</option><option>2.7</option><option>2.8</option><option>2.9</option><option>2.10</option><option>2.11</option><option>2.12</option></select></div>
                     <div class="form-grp"><label>Quantity</label><input type="number" id="edit-qty" min="0"></div>
                 </div>
                 <div class="form-row">
@@ -369,358 +322,158 @@
     <script>
     const SUPABASE_URL = 'https://fjogabazmjrzulkpihyy.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqb2dhYmF6bWpyenVsa3BpaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4MjQ4MDksImV4cCI6MjA4NDQwMDgwOX0.-OmFa7Hog-zBwpSE_9cjfxnBXbCjpawAtKtY-E1Ez2w';
-    
     const { createClient } = window.supabase;
     const db = createClient(SUPABASE_URL, SUPABASE_KEY);
     
-    let stockData = [];
-    let ordersData = [];
-    let platform = 'meesho';
-    let filterPlat = 'all';
-    let filterStatus = 'all';
-    let currentUser = null;
+    let stockData = [], ordersData = [], platform = 'meesho', filterPlat = 'all', filterStatus = 'all', currentUser = null;
     
-    // AUTH
-    function showError(msg) {
-        var el = document.getElementById('loginError');
-        el.textContent = msg;
-        el.style.display = 'block';
-    }
+    function showError(msg) { var el = document.getElementById('loginError'); el.textContent = msg; el.style.display = 'block'; }
     
     async function doLogin() {
-        var email = document.getElementById('loginEmail').value.trim();
-        var password = document.getElementById('loginPassword').value;
-        if (!email) { showError('Please enter email'); return; }
-        if (!password) { showError('Please enter password'); return; }
-        document.getElementById('loginBtn').disabled = true;
-        document.getElementById('loginBtn').textContent = 'Logging in...';
+        var email = document.getElementById('loginEmail').value.trim(), password = document.getElementById('loginPassword').value;
+        if (!email || !password) { showError('Enter email and password'); return; }
+        document.getElementById('loginBtn').disabled = true; document.getElementById('loginBtn').textContent = 'Logging in...';
         document.getElementById('loginError').style.display = 'none';
         try {
-            var result = await db.auth.signInWithPassword({ email: email, password: password });
+            var result = await db.auth.signInWithPassword({ email, password });
             if (result.error) throw new Error(result.error.message);
-            currentUser = result.data.user;
-            showApp();
+            currentUser = result.data.user; showApp();
         } catch (err) { showError(err.message); }
-        document.getElementById('loginBtn').disabled = false;
-        document.getElementById('loginBtn').textContent = 'Login';
+        document.getElementById('loginBtn').disabled = false; document.getElementById('loginBtn').textContent = 'Login';
     }
     
-    async function doLogout() {
-        await db.auth.signOut();
-        currentUser = null;
-        document.getElementById('loginPage').classList.remove('hide');
-        document.getElementById('appContainer').classList.remove('show');
-        document.getElementById('loginPassword').value = '';
-    }
+    async function doLogout() { await db.auth.signOut(); currentUser = null; document.getElementById('loginPage').classList.remove('hide'); document.getElementById('appContainer').classList.remove('show'); }
+    function showApp() { document.getElementById('loginPage').classList.add('hide'); document.getElementById('appContainer').classList.add('show'); document.getElementById('userEmail').textContent = '👤 ' + currentUser.email; document.getElementById('o-date').value = new Date().toISOString().split('T')[0]; refreshData(); }
+    async function checkAuth() { var result = await db.auth.getSession(); if (result.data.session) { currentUser = result.data.session.user; showApp(); } }
+    function setStatus(msg, type) { var bar = document.getElementById('statusBar'); bar.textContent = msg; bar.className = 'status-bar' + (type === 'error' ? ' error' : type === 'syncing' ? ' syncing' : ''); }
     
-    function showApp() {
-        document.getElementById('loginPage').classList.add('hide');
-        document.getElementById('appContainer').classList.add('show');
-        document.getElementById('userEmail').textContent = '👤 ' + currentUser.email;
-        document.getElementById('o-date').value = new Date().toISOString().split('T')[0];
-        refreshData();
-    }
-    
-    async function checkAuth() {
-        var result = await db.auth.getSession();
-        if (result.data.session) { currentUser = result.data.session.user; showApp(); }
-    }
-    
-    // STATUS
-    function setStatus(msg, type) {
-        var bar = document.getElementById('statusBar');
-        bar.textContent = msg;
-        bar.className = 'status-bar';
-        if (type === 'error') bar.classList.add('error');
-        if (type === 'syncing') bar.classList.add('syncing');
-    }
-    
-    // DATA
     async function loadStock() {
-        try {
-            var result = await db.from('stock').select('*').order('created_at', { ascending: false });
-            if (result.error) throw new Error(result.error.message);
-            stockData = result.data || [];
-            renderStock();
-            renderDashboard();
-            populateItemDropdown();
-            return true;
-        } catch (err) { setStatus('❌ Stock error: ' + err.message, 'error'); return false; }
+        try { var result = await db.from('stock').select('*').order('created_at', { ascending: false }); if (result.error) throw new Error(result.error.message); stockData = result.data || []; renderStock(); renderDashboard(); populateItemDropdown(); return true; }
+        catch (err) { setStatus('❌ ' + err.message, 'error'); return false; }
     }
-    
     async function loadOrders() {
-        try {
-            var result = await db.from('orders').select('*').order('created_at', { ascending: false });
-            if (result.error) throw new Error(result.error.message);
-            ordersData = result.data || [];
-            renderOrders();
-            renderDashboard();
-            return true;
-        } catch (err) { setStatus('❌ Orders error: ' + err.message, 'error'); return false; }
+        try { var result = await db.from('orders').select('*').order('created_at', { ascending: false }); if (result.error) throw new Error(result.error.message); ordersData = result.data || []; renderOrders(); renderDashboard(); return true; }
+        catch (err) { setStatus('❌ ' + err.message, 'error'); return false; }
     }
-    
-    async function refreshData() {
-        setStatus('🔄 Syncing...', 'syncing');
-        var s = await loadStock();
-        var o = await loadOrders();
-        if (s && o) setStatus('✅ Connected to Cloud Database');
-    }
+    async function refreshData() { setStatus('🔄 Syncing...', 'syncing'); var s = await loadStock(), o = await loadOrders(); if (s && o) setStatus('✅ Connected'); }
     
     function populateItemDropdown() {
         var select = document.getElementById('o-item');
-        select.innerHTML = '<option value="">-- Select from stock --</option>';
-        stockData.forEach(function(item) {
-            var opt = document.createElement('option');
-            opt.value = item.id;
-            opt.textContent = item.name + ' (' + item.size + '") - Qty: ' + item.qty + ' - ₹' + item.price;
-            opt.dataset.size = item.size;
-            opt.dataset.price = item.price;
-            select.appendChild(opt);
-        });
+        select.innerHTML = '<option value="">-- Select --</option>' + stockData.map(function(i) { return '<option value="'+i.id+'" data-size="'+i.size+'" data-price="'+i.price+'">'+i.name+' ('+i.size+'") ₹'+i.price+'</option>'; }).join('');
     }
+    function getStockOptions(selected) { return '<option value="">--</option>' + stockData.map(function(s) { return '<option value="'+s.name+'"'+(selected===s.name?' selected':'')+'>'+s.name+'</option>'; }).join(''); }
     
     document.addEventListener('change', function(e) {
-        if (e.target.id === 'o-item') {
-            var opt = e.target.options[e.target.selectedIndex];
-            if (opt.value) {
-                document.getElementById('o-size').value = opt.dataset.size;
-                document.getElementById('o-amt').value = opt.dataset.price;
-            }
-        }
+        if (e.target.id === 'o-item') { var opt = e.target.options[e.target.selectedIndex]; if (opt.value) { document.getElementById('o-size').value = opt.dataset.size; document.getElementById('o-amt').value = opt.dataset.price; } }
     });
     
-    // TABS
-    document.querySelectorAll('.tab-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-            document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
-            btn.classList.add('active');
-            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-        });
-    });
+    document.querySelectorAll('.tab-btn').forEach(function(btn) { btn.addEventListener('click', function() { document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); }); document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); }); btn.classList.add('active'); document.getElementById('tab-' + btn.dataset.tab).classList.add('active'); }); });
+    document.querySelectorAll('.plat-btn').forEach(function(btn) { btn.addEventListener('click', function() { document.querySelectorAll('.plat-btn').forEach(function(b) { b.classList.remove('active'); }); btn.classList.add('active'); platform = btn.dataset.p; }); });
+    document.querySelectorAll('.filter-btn').forEach(function(btn) { btn.addEventListener('click', function() { if (btn.dataset.f) { document.querySelectorAll('.filter-btn[data-f]').forEach(function(b) { b.classList.remove('active'); }); btn.classList.add('active'); filterPlat = btn.dataset.f; } if (btn.dataset.s) { if (btn.classList.contains('active')) { btn.classList.remove('active'); filterStatus = 'all'; } else { document.querySelectorAll('.filter-btn[data-s]').forEach(function(b) { b.classList.remove('active'); }); btn.classList.add('active'); filterStatus = btn.dataset.s; } } renderOrders(); }); });
     
-    document.querySelectorAll('.plat-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.plat-btn').forEach(function(b) { b.classList.remove('active'); });
-            btn.classList.add('active');
-            platform = btn.dataset.p;
-        });
-    });
-    
-    document.querySelectorAll('.filter-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            if (btn.dataset.f) {
-                document.querySelectorAll('.filter-btn[data-f]').forEach(function(b) { b.classList.remove('active'); });
-                btn.classList.add('active');
-                filterPlat = btn.dataset.f;
-            }
-            if (btn.dataset.s) {
-                if (btn.classList.contains('active')) {
-                    btn.classList.remove('active');
-                    filterStatus = 'all';
-                } else {
-                    document.querySelectorAll('.filter-btn[data-s]').forEach(function(b) { b.classList.remove('active'); });
-                    btn.classList.add('active');
-                    filterStatus = btn.dataset.s;
-                }
-            }
-            renderOrders();
-        });
-    });
-    
-    // STOCK
     document.getElementById('addStockBtn').addEventListener('click', async function() {
-        var name = document.getElementById('s-name').value.trim();
-        var qty = document.getElementById('s-qty').value;
-        var cost = document.getElementById('s-cost').value;
-        var price = document.getElementById('s-price').value;
-        if (!name) { alert('Please enter Product Name'); return; }
-        if (!qty) { alert('Please enter Quantity'); return; }
-        if (!cost) { alert('Please enter Cost Price'); return; }
-        if (!price) { alert('Please enter Sell Price'); return; }
-        setStatus('🔄 Adding item...', 'syncing');
-        try {
-            var result = await db.from('stock').insert({
-                name: name, size: document.getElementById('s-size').value,
-                qty: parseInt(qty), cost: parseFloat(cost), price: parseFloat(price)
-            });
-            if (result.error) throw new Error(result.error.message);
-            document.getElementById('s-name').value = '';
-            document.getElementById('s-qty').value = '';
-            document.getElementById('s-cost').value = '';
-            document.getElementById('s-price').value = '';
-            await loadStock();
-            setStatus('✅ Stock item added!');
-        } catch (err) { setStatus('❌ Error: ' + err.message, 'error'); alert('Error: ' + err.message); }
+        var name = document.getElementById('s-name').value.trim(), qty = document.getElementById('s-qty').value, cost = document.getElementById('s-cost').value, price = document.getElementById('s-price').value;
+        if (!name || !qty || !cost || !price) { alert('Fill all fields'); return; }
+        setStatus('🔄 Adding...', 'syncing');
+        try { await db.from('stock').insert({ name, size: document.getElementById('s-size').value, qty: parseInt(qty), cost: parseFloat(cost), price: parseFloat(price) }); document.getElementById('s-name').value = ''; document.getElementById('s-qty').value = ''; document.getElementById('s-cost').value = ''; document.getElementById('s-price').value = ''; await loadStock(); setStatus('✅ Added!'); }
+        catch (err) { setStatus('❌ ' + err.message, 'error'); }
     });
     
-    window.delStock = async function(id) {
-        if (!confirm('Delete this stock item?')) return;
-        setStatus('🔄 Deleting...', 'syncing');
-        try {
-            var result = await db.from('stock').delete().eq('id', id);
-            if (result.error) throw new Error(result.error.message);
-            await loadStock();
-            setStatus('✅ Item deleted');
-        } catch (err) { setStatus('❌ Error: ' + err.message, 'error'); }
-    };
+    window.delStock = async function(id) { if (!confirm('Delete?')) return; try { await db.from('stock').delete().eq('id', id); await loadStock(); setStatus('✅ Deleted'); } catch (err) { setStatus('❌ ' + err.message, 'error'); } };
+    window.editStock = function(id) { var item = stockData.find(function(x) { return x.id === id; }); if (!item) return; document.getElementById('edit-id').value = id; document.getElementById('edit-name').value = item.name; document.getElementById('edit-size').value = item.size; document.getElementById('edit-qty').value = item.qty; document.getElementById('edit-cost').value = item.cost; document.getElementById('edit-price').value = item.price; document.getElementById('editModal').classList.add('show'); };
+    window.saveEdit = async function() { var id = parseInt(document.getElementById('edit-id').value); try { await db.from('stock').update({ name: document.getElementById('edit-name').value, size: document.getElementById('edit-size').value, qty: parseInt(document.getElementById('edit-qty').value), cost: parseFloat(document.getElementById('edit-cost').value), price: parseFloat(document.getElementById('edit-price').value) }).eq('id', id); closeModal(); await loadStock(); setStatus('✅ Updated'); } catch (err) { setStatus('❌ ' + err.message, 'error'); } };
+    window.updateQty = async function(id, val) { try { await db.from('stock').update({ qty: parseInt(val) || 0 }).eq('id', id); await loadStock(); } catch (err) { setStatus('❌ ' + err.message, 'error'); } };
     
-    window.editStock = function(id) {
-        var item = stockData.find(function(x) { return x.id === id; });
-        if (!item) return;
-        document.getElementById('edit-id').value = id;
-        document.getElementById('edit-name').value = item.name;
-        document.getElementById('edit-size').value = item.size;
-        document.getElementById('edit-qty').value = item.qty;
-        document.getElementById('edit-cost').value = item.cost;
-        document.getElementById('edit-price').value = item.price;
-        document.getElementById('editModal').classList.add('show');
-    };
-    
-    window.saveEdit = async function() {
-        var id = parseInt(document.getElementById('edit-id').value);
-        setStatus('🔄 Saving...', 'syncing');
-        try {
-            var result = await db.from('stock').update({
-                name: document.getElementById('edit-name').value,
-                size: document.getElementById('edit-size').value,
-                qty: parseInt(document.getElementById('edit-qty').value),
-                cost: parseFloat(document.getElementById('edit-cost').value),
-                price: parseFloat(document.getElementById('edit-price').value)
-            }).eq('id', id);
-            if (result.error) throw new Error(result.error.message);
-            closeModal();
-            await loadStock();
-            setStatus('✅ Item updated');
-        } catch (err) { setStatus('❌ Error: ' + err.message, 'error'); }
-    };
-    
-    window.updateQty = async function(id, val) {
-        try {
-            var result = await db.from('stock').update({ qty: parseInt(val) || 0 }).eq('id', id);
-            if (result.error) throw new Error(result.error.message);
-            await loadStock();
-        } catch (err) { setStatus('❌ Error: ' + err.message, 'error'); }
-    };
-    
-    // ORDERS
     document.getElementById('addOrderBtn').addEventListener('click', async function() {
-        var orderId = document.getElementById('o-id').value.trim();
-        var itemId = document.getElementById('o-item').value;
-        var qty = parseInt(document.getElementById('o-qty').value) || 1;
-        var amt = document.getElementById('o-amt').value;
-        var size = document.getElementById('o-size').value;
-        var status = document.getElementById('o-status').value;
-        if (!orderId) { alert('Please enter Order ID'); return; }
-        if (!itemId) { alert('Please select an item from stock'); return; }
-        if (!amt) { alert('Please enter Amount'); return; }
-        var stockItem = stockData.find(function(x) { return x.id === parseInt(itemId); });
-        if (!stockItem) { alert('Item not found'); return; }
-        if (stockItem.qty < qty) { alert('Not enough stock! Available: ' + stockItem.qty); return; }
-        setStatus('🔄 Adding order...', 'syncing');
+        var orderId = document.getElementById('o-id').value.trim(), itemId = document.getElementById('o-item').value, qty = parseInt(document.getElementById('o-qty').value) || 1, amt = document.getElementById('o-amt').value;
+        if (!orderId || !itemId || !amt) { alert('Fill required fields'); return; }
+        var stockItem = stockData.find(function(x) { return x.id === parseInt(itemId); }); if (!stockItem) return;
+        if (stockItem.qty < qty) { alert('Not enough stock: ' + stockItem.qty); return; }
+        setStatus('🔄 Adding...', 'syncing');
         try {
-            var result = await db.from('orders').insert({
-                order_id: orderId,
-                customer: document.getElementById('o-cust').value.trim() || null,
-                items: stockItem.name, size: size, qty: qty,
-                amount: parseFloat(amt) * qty,
-                received: parseFloat(document.getElementById('o-recv').value) || 0,
-                platform: platform, status: status,
-                order_date: document.getElementById('o-date').value || new Date().toISOString().split('T')[0]
-            });
-            if (result.error) throw new Error(result.error.message);
-            var newQty = stockItem.qty - qty;
-            await db.from('stock').update({ qty: newQty }).eq('id', stockItem.id);
-            document.getElementById('o-id').value = '';
-            document.getElementById('o-cust').value = '';
-            document.getElementById('o-item').value = '';
-            document.getElementById('o-qty').value = '1';
-            document.getElementById('o-amt').value = '';
-            document.getElementById('o-recv').value = '0';
-            await loadStock();
-            await loadOrders();
-            setStatus('✅ Order added! Stock updated.');
-        } catch (err) { setStatus('❌ Error: ' + err.message, 'error'); alert('Error: ' + err.message); }
+            await db.from('orders').insert({ order_id: orderId, customer: document.getElementById('o-cust').value.trim() || null, state: document.getElementById('o-state').value.trim() || null, items: stockItem.name, size: document.getElementById('o-size').value, qty, amount: parseFloat(amt) * qty, received: parseFloat(document.getElementById('o-recv').value) || 0, platform, status: document.getElementById('o-status').value, remark: stockItem.name, order_date: document.getElementById('o-date').value || new Date().toISOString().split('T')[0] });
+            await db.from('stock').update({ qty: stockItem.qty - qty }).eq('id', stockItem.id);
+            document.getElementById('o-id').value = ''; document.getElementById('o-cust').value = ''; document.getElementById('o-state').value = ''; document.getElementById('o-item').value = ''; document.getElementById('o-qty').value = '1'; document.getElementById('o-amt').value = ''; document.getElementById('o-recv').value = '0';
+            await loadStock(); await loadOrders(); setStatus('✅ Order added!');
+        } catch (err) { setStatus('❌ ' + err.message, 'error'); }
     });
     
-    window.delOrder = async function(id) {
-        if (!confirm('Delete this order?')) return;
-        setStatus('🔄 Deleting...', 'syncing');
-        try {
-            var result = await db.from('orders').delete().eq('id', id);
-            if (result.error) throw new Error(result.error.message);
-            await loadOrders();
-            setStatus('✅ Order deleted');
-        } catch (err) { setStatus('❌ Error: ' + err.message, 'error'); }
-    };
+    window.delOrder = async function(id) { if (!confirm('Delete?')) return; try { await db.from('orders').delete().eq('id', id); await loadOrders(); setStatus('✅ Deleted'); } catch (err) { setStatus('❌ ' + err.message, 'error'); } };
+    window.updateRemark = async function(id, val) { try { await db.from('orders').update({ remark: val || null }).eq('id', id); setStatus('✅ Saved'); } catch (err) { setStatus('❌ ' + err.message, 'error'); } };
+    window.closeModal = function() { document.querySelectorAll('.modal-bg').forEach(function(m) { m.classList.remove('show'); }); };
     
-    window.closeModal = function() {
-        document.querySelectorAll('.modal-bg').forEach(function(m) { m.classList.remove('show'); });
-    };
-    
-    // EXCEL IMPORT
-    window.handleExcelUpload = async function(input) {
-        var file = input.files[0];
-        if (!file) return;
-        
+    // FILE UPLOAD - Excel AND CSV
+    window.handleFileUpload = async function(input) {
+        var file = input.files[0]; if (!file) return;
         var statusDiv = document.getElementById('importStatus');
         statusDiv.innerHTML = '<div class="alert alert-success">📊 Reading file...</div>';
-        setStatus('🔄 Importing Excel...', 'syncing');
+        setStatus('🔄 Importing...', 'syncing');
         
+        var isCSV = file.name.toLowerCase().endsWith('.csv');
         var reader = new FileReader();
+        
         reader.onload = async function(e) {
             try {
-                var data = new Uint8Array(e.target.result);
-                var workbook = XLSX.read(data, { type: 'array' });
+                var rows = [];
                 
-                // Find Order Payments sheet
-                var sheetName = workbook.SheetNames.find(function(n) { return n.includes('Order') || n.includes('Payment'); }) || workbook.SheetNames[1];
-                var sheet = workbook.Sheets[sheetName];
-                var json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                if (isCSV) {
+                    // Parse CSV
+                    var text = e.target.result;
+                    var lines = text.split('\n');
+                    for (var i = 0; i < lines.length; i++) {
+                        var row = [];
+                        var line = lines[i];
+                        var inQuote = false, val = '';
+                        for (var j = 0; j < line.length; j++) {
+                            var c = line[j];
+                            if (c === '"') { inQuote = !inQuote; }
+                            else if (c === ',' && !inQuote) { row.push(val.trim()); val = ''; }
+                            else { val += c; }
+                        }
+                        row.push(val.trim());
+                        if (row.length > 1) rows.push(row);
+                    }
+                } else {
+                    // Parse Excel
+                    var data = new Uint8Array(e.target.result);
+                    var workbook = XLSX.read(data, { type: 'array' });
+                    var sheetName = workbook.SheetNames.find(function(n) { return n.includes('Order'); }) || workbook.SheetNames[1] || workbook.SheetNames[0];
+                    rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+                }
                 
                 // Find header row
                 var headerRow = -1;
-                for (var i = 0; i < Math.min(10, json.length); i++) {
-                    var row = json[i];
-                    if (row && row.some(function(c) { return c && c.toString().includes('Sub Order'); })) {
-                        headerRow = i;
-                        break;
-                    }
+                for (var i = 0; i < Math.min(10, rows.length); i++) {
+                    var row = rows[i];
+                    if (row && row.some(function(c) { return c && (c.toString().includes('Sub Order') || c.toString().includes('Order No')); })) { headerRow = i; break; }
                 }
+                if (headerRow === -1) { statusDiv.innerHTML = '<div class="alert alert-danger">❌ No order data found</div>'; return; }
                 
-                if (headerRow === -1) {
-                    statusDiv.innerHTML = '<div class="alert alert-danger">❌ Could not find order data in file</div>';
-                    return;
-                }
-                
-                var headers = json[headerRow];
+                var headers = rows[headerRow];
                 var colMap = {};
                 headers.forEach(function(h, idx) {
                     if (!h) return;
                     var hl = h.toString().toLowerCase();
-                    if (hl.includes('sub order')) colMap.orderId = idx;
-                    if (hl.includes('order date') && !colMap.date) colMap.date = idx;
+                    if (hl.includes('sub order') || hl.includes('order no')) colMap.orderId = idx;
+                    if (hl.includes('order date') && colMap.date === undefined) colMap.date = idx;
                     if (hl.includes('product name')) colMap.product = idx;
-                    if (hl.includes('order status') || hl.includes('live order')) colMap.status = idx;
+                    if (hl.includes('sku')) colMap.sku = idx;
+                    if (hl === 'size' || hl.includes('size')) colMap.size = idx;
                     if (hl.includes('quantity')) colMap.qty = idx;
+                    if (hl.includes('customer state') || hl === 'state') colMap.state = idx;
+                    if (hl.includes('reason') || hl.includes('status') || hl.includes('live order')) colMap.status = idx;
                     if (hl.includes('final settlement')) colMap.received = idx;
-                    if (hl.includes('total sale amount') && !hl.includes('return')) colMap.amount = idx;
+                    if ((hl.includes('supplier') && hl.includes('price')) || (hl.includes('total sale') && !hl.includes('return'))) colMap.amount = idx;
                 });
                 
-                var imported = 0;
-                var skipped = 0;
-                var errors = [];
+                var imported = 0, skipped = 0, updated = 0;
                 
-                for (var r = headerRow + 1; r < json.length; r++) {
-                    var row = json[r];
-                    if (!row || !row[colMap.orderId]) continue;
+                for (var r = headerRow + 1; r < rows.length; r++) {
+                    var row = rows[r]; if (!row || !row[colMap.orderId]) continue;
+                    var orderId = row[colMap.orderId].toString().trim(); if (orderId.length < 5) continue;
                     
-                    var orderId = row[colMap.orderId] ? row[colMap.orderId].toString() : '';
-                    if (!orderId || orderId.length < 5) continue;
-                    
-                    // Check if order exists
-                    var exists = ordersData.find(function(o) { return o.order_id === orderId; });
-                    if (exists) { skipped++; continue; }
+                    // Check existing
+                    var existing = ordersData.find(function(o) { return o.order_id === orderId; });
                     
                     var status = row[colMap.status] ? row[colMap.status].toString() : 'Pending';
                     if (status.toLowerCase().includes('deliver')) status = 'Delivered';
@@ -730,61 +483,62 @@
                     var orderDate = '';
                     if (row[colMap.date]) {
                         var d = row[colMap.date];
-                        if (typeof d === 'number') {
-                            var date = new Date((d - 25569) * 86400 * 1000);
-                            orderDate = date.toISOString().split('T')[0];
-                        } else {
-                            orderDate = d.toString().split(' ')[0];
-                        }
+                        if (typeof d === 'number') { orderDate = new Date((d - 25569) * 86400 * 1000).toISOString().split('T')[0]; }
+                        else { orderDate = d.toString().split(' ')[0].split('T')[0]; }
                     }
                     
-                    try {
-                        await db.from('orders').insert({
-                            order_id: orderId,
-                            items: row[colMap.product] ? row[colMap.product].toString().substring(0, 100) : '',
-                            qty: parseInt(row[colMap.qty]) || 1,
-                            amount: parseFloat(row[colMap.amount]) || 0,
-                            received: parseFloat(row[colMap.received]) || 0,
-                            status: status,
-                            platform: 'meesho',
-                            order_date: orderDate || new Date().toISOString().split('T')[0]
-                        });
-                        imported++;
-                    } catch (err) {
-                        errors.push(orderId);
+                    var sku = row[colMap.sku] ? row[colMap.sku].toString().trim() : '';
+                    var size = row[colMap.size] ? row[colMap.size].toString().trim() : '';
+                    var state = row[colMap.state] ? row[colMap.state].toString().trim() : '';
+                    
+                    if (existing) {
+                        // Update existing order
+                        try {
+                            await db.from('orders').update({
+                                status: status,
+                                size: size || existing.size,
+                                state: state || existing.state,
+                                remark: sku || existing.remark
+                            }).eq('id', existing.id);
+                            updated++;
+                        } catch (err) { }
+                    } else {
+                        // Insert new
+                        try {
+                            await db.from('orders').insert({
+                                order_id: orderId,
+                                items: row[colMap.product] ? row[colMap.product].toString().substring(0, 200) : '',
+                                size: size,
+                                qty: parseInt(row[colMap.qty]) || 1,
+                                state: state,
+                                amount: parseFloat(row[colMap.amount]) || 0,
+                                received: parseFloat(row[colMap.received]) || 0,
+                                status: status,
+                                platform: 'meesho',
+                                remark: sku,
+                                order_date: orderDate || new Date().toISOString().split('T')[0]
+                            });
+                            imported++;
+                        } catch (err) { skipped++; }
                     }
                 }
                 
                 await loadOrders();
-                statusDiv.innerHTML = '<div class="alert alert-success">✅ Imported: <strong>' + imported + '</strong> orders | Skipped (duplicate): <strong>' + skipped + '</strong>' + (errors.length > 0 ? ' | Errors: ' + errors.length : '') + '</div>';
-                setStatus('✅ Import complete! ' + imported + ' orders added.');
-                input.value = '';
-                
-            } catch (err) {
-                statusDiv.innerHTML = '<div class="alert alert-danger">❌ Error: ' + err.message + '</div>';
-                setStatus('❌ Import failed', 'error');
-            }
+                statusDiv.innerHTML = '<div class="alert alert-success">✅ New: <b>' + imported + '</b> | Updated: <b>' + updated + '</b> | Skipped: <b>' + skipped + '</b></div>';
+                setStatus('✅ Import done!'); input.value = '';
+            } catch (err) { statusDiv.innerHTML = '<div class="alert alert-danger">❌ ' + err.message + '</div>'; setStatus('❌ Failed', 'error'); }
         };
-        reader.readAsArrayBuffer(file);
+        
+        if (isCSV) { reader.readAsText(file); } else { reader.readAsArrayBuffer(file); }
     };
     
-    // EXPORT
     window.exportData = function() {
-        var csv = 'Type,Name/OrderID,Size,Qty,Status,Cost/Amount,Price/Received\n';
-        stockData.forEach(function(s) {
-            csv += 'Stock,"' + s.name + '",' + s.size + ',' + s.qty + ',,' + s.cost + ',' + s.price + '\n';
-        });
-        ordersData.forEach(function(o) {
-            csv += 'Order,"' + o.order_id + '",' + (o.size||'') + ',' + (o.qty||1) + ',' + (o.status||'') + ',' + o.amount + ',' + o.received + '\n';
-        });
-        var blob = new Blob([csv], { type: 'text/csv' });
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'glass-hut-' + new Date().toISOString().split('T')[0] + '.csv';
-        a.click();
+        var csv = 'Type,Name,SKU,Size,Qty,State,Status,Amount,Received\n';
+        stockData.forEach(function(s) { csv += 'Stock,"'+s.name+'",,'+s.size+','+s.qty+',,,' +s.cost+','+s.price+'\n'; });
+        ordersData.forEach(function(o) { csv += 'Order,"'+o.order_id+'","'+(o.remark||'')+'",'+(o.size||'')+','+(o.qty||1)+','+(o.state||'')+','+(o.status||'')+','+o.amount+','+o.received+'\n'; });
+        var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'glass-hut-'+new Date().toISOString().split('T')[0]+'.csv'; a.click();
     };
     
-    // RENDER
     function renderDashboard() {
         var stockVal = stockData.reduce(function(s, x) { return s + (x.qty * x.cost); }, 0);
         var sales = ordersData.reduce(function(s, x) { return s + x.amount; }, 0);
@@ -792,41 +546,22 @@
         var delivered = ordersData.filter(function(x) { return x.status === 'Delivered'; }).length;
         var rto = ordersData.filter(function(x) { return x.status === 'RTO'; }).length;
         var lowStock = stockData.filter(function(x) { return x.qty <= 20; });
-        
         document.getElementById('d-stock').textContent = '₹' + stockVal.toLocaleString();
         document.getElementById('d-sales').textContent = '₹' + sales.toLocaleString();
         document.getElementById('d-recv').textContent = '₹' + recv.toLocaleString();
         document.getElementById('d-del').textContent = delivered;
         document.getElementById('d-rto').textContent = rto;
-        
-        document.getElementById('alertBox').innerHTML = lowStock.length > 0 ?
-            '<div class="alert alert-danger">⚠️ <strong>Low Stock:</strong> ' + lowStock.map(function(x) { return x.name + ' (' + x.qty + ')'; }).join(', ') + '</div>' : '';
-        
-        document.getElementById('dashLow').innerHTML = lowStock.length > 0 ?
-            lowStock.slice(0,5).map(function(x) { return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid #fef3c7"><span>'+x.name+'</span><span style="color:#dc2626;font-weight:600">'+x.qty+'</span></div>'; }).join('') :
-            '<div class="empty">All stock OK ✅</div>';
-        
-        document.getElementById('dashRecent').innerHTML = ordersData.length > 0 ?
-            ordersData.slice(0,5).map(function(x) { return '<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid #fef3c7"><span>'+x.order_id.substring(0,15)+'.. <span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'Pending')+'</span></span><span style="font-weight:600">₹'+x.amount+'</span></div>'; }).join('') :
-            '<div class="empty">No orders yet</div>';
+        document.getElementById('alertBox').innerHTML = lowStock.length > 0 ? '<div class="alert alert-danger">⚠️ Low: ' + lowStock.map(function(x) { return x.name + '(' + x.qty + ')'; }).join(', ') + '</div>' : '';
+        document.getElementById('dashLow').innerHTML = lowStock.length > 0 ? lowStock.slice(0,5).map(function(x) { return '<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #fef3c7;font-size:0.75rem"><span>'+x.name+'</span><span style="color:#dc2626">'+x.qty+'</span></div>'; }).join('') : '<div class="empty">All OK ✅</div>';
+        document.getElementById('dashRecent').innerHTML = ordersData.length > 0 ? ordersData.slice(0,5).map(function(x) { return '<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #fef3c7;font-size:0.7rem"><span>'+(x.remark||x.order_id.substring(0,10)+'..')+' <span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'?')+'</span></span><span>₹'+x.amount+'</span></div>'; }).join('') : '<div class="empty">No orders</div>';
     }
     
     function renderStock() {
         document.getElementById('stockCnt').textContent = stockData.length;
-        var html = stockData.length > 0 ?
-            stockData.map(function(x) {
-                var isLow = x.qty <= 20;
-                return '<tr class="'+(isLow?'low-stock':'')+'">' +
-                    '<td><strong>'+x.name+'</strong></td>' +
-                    '<td>'+x.size+'"</td>' +
-                    '<td style="text-align:center"><input type="number" class="qty-input" value="'+x.qty+'" onchange="updateQty('+x.id+',this.value)" min="0" style="'+(isLow?'color:#dc2626;font-weight:600':'')+'"></td>' +
-                    '<td style="text-align:right">₹'+x.cost+'</td>' +
-                    '<td style="text-align:right;color:#059669">₹'+x.price+'</td>' +
-                    '<td style="text-align:right;font-weight:600">₹'+(x.qty*x.cost).toLocaleString()+'</td>' +
-                    '<td><button class="act-btn edit" onclick="editStock('+x.id+')">✏️</button><button class="act-btn del" onclick="delStock('+x.id+')">🗑️</button></td></tr>';
-            }).join('') :
-            '<tr><td colspan="7" class="empty">No stock items yet</td></tr>';
-        document.getElementById('stockTbl').innerHTML = html;
+        document.getElementById('stockTbl').innerHTML = stockData.length > 0 ? stockData.map(function(x) {
+            var isLow = x.qty <= 20;
+            return '<tr class="'+(isLow?'low-stock':'')+'"><td><b>'+x.name+'</b></td><td>'+x.size+'"</td><td><input type="number" class="qty-input" value="'+x.qty+'" onchange="updateQty('+x.id+',this.value)" min="0" style="'+(isLow?'color:#dc2626;font-weight:600':'')+'"></td><td>₹'+x.cost+'</td><td style="color:#059669">₹'+x.price+'</td><td style="font-weight:600">₹'+(x.qty*x.cost).toLocaleString()+'</td><td><button class="act-btn edit" onclick="editStock('+x.id+')">✏️</button><button class="act-btn del" onclick="delStock('+x.id+')">🗑️</button></td></tr>';
+        }).join('') : '<tr><td colspan="7" class="empty">No stock</td></tr>';
     }
     
     function renderOrders() {
@@ -834,46 +569,33 @@
         if (filterPlat !== 'all') filtered = filtered.filter(function(x) { return x.platform === filterPlat; });
         if (filterStatus !== 'all') filtered = filtered.filter(function(x) { return x.status === filterStatus; });
         document.getElementById('ordCnt').textContent = filtered.length;
-        
-        var html = filtered.length > 0 ?
-            filtered.map(function(x) {
-                var statusClass = (x.status||'pending').toLowerCase();
-                return '<tr>' +
-                    '<td><strong style="font-size:0.7rem">'+x.order_id+'</strong></td>' +
-                    '<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+x.items+'</td>' +
-                    '<td>'+(x.size||'-')+'"</td>' +
-                    '<td>'+(x.qty||1)+'</td>' +
-                    '<td><span class="badge badge-'+x.platform+'">'+x.platform+'</span></td>' +
-                    '<td><span class="badge badge-'+statusClass+'">'+(x.status||'Pending')+'</span></td>' +
-                    '<td>'+x.order_date+'</td>' +
-                    '<td style="text-align:right;font-weight:600">₹'+x.amount.toLocaleString()+'</td>' +
-                    '<td style="text-align:right;color:#059669">₹'+x.received.toLocaleString()+'</td>' +
-                    '<td><button class="act-btn del" onclick="delOrder('+x.id+')">🗑️</button></td></tr>';
-            }).join('') :
-            '<tr><td colspan="10" class="empty">No orders found</td></tr>';
-        document.getElementById('ordTbl').innerHTML = html;
+        document.getElementById('ordTbl').innerHTML = filtered.length > 0 ? filtered.map(function(x) {
+            var shortProduct = x.items ? (x.items.length > 18 ? x.items.substring(0,18)+'..' : x.items) : '-';
+            return '<tr>' +
+                '<td style="font-size:0.55rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+x.order_id+'">'+x.order_id+'</td>' +
+                '<td class="product-cell"><span class="product-short" title="'+(x.items||'')+'">'+shortProduct+'</span></td>' +
+                '<td><select class="remark-select" onchange="updateRemark('+x.id+',this.value)">'+getStockOptions(x.remark)+'</select></td>' +
+                '<td>'+(x.size||'-')+'"</td>' +
+                '<td>'+(x.qty||1)+'</td>' +
+                '<td style="font-size:0.55rem">'+(x.state||'-')+'</td>' +
+                '<td><span class="badge badge-'+x.platform+'">'+x.platform+'</span></td>' +
+                '<td><span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'?')+'</span></td>' +
+                '<td style="font-size:0.55rem">'+x.order_date+'</td>' +
+                '<td style="font-weight:600">₹'+x.amount.toLocaleString()+'</td>' +
+                '<td style="color:#059669">₹'+x.received.toLocaleString()+'</td>' +
+                '<td><button class="act-btn del" onclick="delOrder('+x.id+')">🗑️</button></td></tr>';
+        }).join('') : '<tr><td colspan="12" class="empty">No orders</td></tr>';
     }
     
-    // INIT
     document.addEventListener('DOMContentLoaded', function() { checkAuth(); });
     document.getElementById('loginPassword').addEventListener('keypress', function(e) { if (e.key === 'Enter') doLogin(); });
     document.getElementById('loginEmail').addEventListener('keypress', function(e) { if (e.key === 'Enter') document.getElementById('loginPassword').focus(); });
     
-    // Drag and drop
     var uploadBox = document.querySelector('.upload-box');
     if (uploadBox) {
-        uploadBox.addEventListener('dragover', function(e) { e.preventDefault(); uploadBox.style.borderColor = '#f59e0b'; uploadBox.style.background = '#fef3c7'; });
-        uploadBox.addEventListener('dragleave', function(e) { e.preventDefault(); uploadBox.style.borderColor = '#fcd34d'; uploadBox.style.background = ''; });
-        uploadBox.addEventListener('drop', function(e) {
-            e.preventDefault();
-            uploadBox.style.borderColor = '#fcd34d';
-            uploadBox.style.background = '';
-            var files = e.dataTransfer.files;
-            if (files.length > 0) {
-                document.getElementById('excelFile').files = files;
-                handleExcelUpload(document.getElementById('excelFile'));
-            }
-        });
+        uploadBox.addEventListener('dragover', function(e) { e.preventDefault(); uploadBox.style.borderColor = '#f59e0b'; });
+        uploadBox.addEventListener('dragleave', function(e) { e.preventDefault(); uploadBox.style.borderColor = '#fcd34d'; });
+        uploadBox.addEventListener('drop', function(e) { e.preventDefault(); uploadBox.style.borderColor = '#fcd34d'; if (e.dataTransfer.files.length > 0) { document.getElementById('excelFile').files = e.dataTransfer.files; handleFileUpload(document.getElementById('excelFile')); } });
     }
     </script>
 </body>
