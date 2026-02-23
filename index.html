@@ -491,8 +491,18 @@ function renderSkus(){
 var pdfUploads=[]; // [{id,name,date,labels:[{orderId,sku,isDuplicate,page}]}]
 var openCardId=null;
 
-function savePdfHistory(){try{localStorage.setItem('gh_pdfs',JSON.stringify(pdfUploads));}catch(e){}}
-function loadPdfHistory(){try{var d=localStorage.getItem('gh_pdfs');if(d)pdfUploads=JSON.parse(d)||[];renderPdfHistory();}catch(e){pdfUploads=[];}}
+// Save PDF upload to Supabase
+async function savePdfUpload(upload){
+    try{var r=await db.from('pdf_uploads').insert({file_name:upload.name,upload_date:new Date().toISOString(),labels:upload.labels,new_count:upload.newCount,dup_count:upload.dupCount});
+        if(r.error)throw new Error(r.error.message);
+    }catch(err){console.error('Save PDF error:',err);}}
+// Load all PDF uploads from Supabase
+async function loadPdfHistory(){
+    try{var r=await db.from('pdf_uploads').select('*').order('created_at',{ascending:false});
+        if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){pdfUploads=[];renderPdfHistory();return;}throw new Error(r.error.message);}
+        pdfUploads=(r.data||[]).map(function(row){return{id:row.id,name:row.file_name,date:new Date(row.upload_date).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),labels:row.labels||[],newCount:row.new_count||0,dupCount:row.dup_count||0};});
+        renderPdfHistory();
+    }catch(err){pdfUploads=[];renderPdfHistory();}}
 
 window.handlePdfUpload=async function(input){
     var file=input.files[0];if(!file)return;
@@ -511,9 +521,10 @@ window.handlePdfUpload=async function(input){
             var pageText=items.join(' ');
             var orderId=extractOrderId(pageText,items);
             var sku=extractSku(pageText,items);
+            var size=extractSize(pageText,items);
             if(orderId||sku){
                 var isDup=orderId?scanHistory.some(function(h){return h.order_id===orderId;}):false;
-                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',isDuplicate:isDup,page:i});
+                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',isDuplicate:isDup,page:i});
             }
         }
         if(labels.length===0){statusDiv.innerHTML='<div class="alert alert-danger">❌ No labels found in "'+escapeHtml(file.name)+'".</div>';setStatus('❌ No labels','error');input.value='';return;}
@@ -527,11 +538,12 @@ window.handlePdfUpload=async function(input){
         }
         var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
         var dp=labels.filter(function(l){return l.isDuplicate;}).length;
-        // Add to history
-        var upload={id:Date.now(),name:file.name,date:new Date().toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),labels:labels,newCount:nw,dupCount:dp};
-        pdfUploads.unshift(upload);
-        savePdfHistory();
-        openCardId=upload.id;
+        // Save to Supabase
+        var upload={name:file.name,labels:labels,newCount:nw,dupCount:dp};
+        await savePdfUpload(upload);
+        await loadPdfHistory();
+        // Auto-open latest
+        if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
         renderPdfHistory();
         statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'</div>';
         setStatus('✅ PDF parsed!');input.value='';
@@ -539,8 +551,10 @@ window.handlePdfUpload=async function(input){
 };
 
 window.togglePdfCard=function(id){openCardId=(openCardId===id)?null:id;renderPdfHistory();};
-window.deleteUpload=function(id){if(!confirm('Delete this upload?'))return;pdfUploads=pdfUploads.filter(function(u){return u.id!==id;});if(openCardId===id)openCardId=null;savePdfHistory();renderPdfHistory();};
-window.clearAllUploads=function(){if(!confirm('Delete ALL upload history?'))return;pdfUploads=[];openCardId=null;savePdfHistory();renderPdfHistory();};
+window.deleteUpload=async function(id){if(!confirm('Delete this upload?'))return;
+    try{await db.from('pdf_uploads').delete().eq('id',id);if(openCardId===id)openCardId=null;await loadPdfHistory();setStatus('✅ Deleted');}catch(err){setStatus('❌ '+err.message,'error');}};
+window.clearAllUploads=async function(){if(!confirm('Delete ALL upload history?'))return;
+    try{await db.from('pdf_uploads').delete().neq('id',0);pdfUploads=[];openCardId=null;renderPdfHistory();setStatus('✅ All cleared');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.clearScanHistory=async function(){
     if(!confirm('⚠️ Delete ALL duplicate detection history?\nAll labels will show as "New" next time.'))return;
     setStatus('🔄 Clearing...','syncing');
@@ -578,8 +592,8 @@ function buildCardDetails(upload){
     var html='';
     // Category counts for NEW only (what to pack)
     var packCounts={};var allCounts={};
-    CATEGORIES.forEach(function(c){packCounts[c]={count:0,skus:[]};allCounts[c]={total:0,newC:0,dupC:0};});
-    packCounts['Uncategorized']={count:0,skus:[]};allCounts['Uncategorized']={total:0,newC:0,dupC:0};
+    CATEGORIES.forEach(function(c){packCounts[c]={count:0,skus:[],sizes:{}};allCounts[c]={total:0,newC:0,dupC:0};});
+    packCounts['Uncategorized']={count:0,skus:[],sizes:{}};allCounts['Uncategorized']={total:0,newC:0,dupC:0};
     var unmapped=[];
     all.forEach(function(l){
         var match=findCategory(l.sku);
@@ -590,9 +604,11 @@ function buildCardDetails(upload){
         if(l.isDuplicate){allCounts[cat].dupC++;}
         else{
             allCounts[cat].newC++;
-            if(!packCounts[cat])packCounts[cat]={count:0,skus:[]};
+            if(!packCounts[cat])packCounts[cat]={count:0,skus:[],sizes:{}};
             packCounts[cat].count++;
             if(packCounts[cat].skus.indexOf(l.sku)===-1)packCounts[cat].skus.push(l.sku);
+            var sz=l.size||'-';
+            packCounts[cat].sizes[sz]=(packCounts[cat].sizes[sz]||0)+1;
         }
     });
     // Unmapped SKU warning
@@ -612,6 +628,13 @@ function buildCardDetails(upload){
             var d=packCounts[cat];if(!d||d.count===0)return;
             var bc='#10b981';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
             html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+cat+'</div><div class="cc-count" style="color:'+bc+'">'+d.count+'</div>';
+            // Size breakdown
+            var sizes=Object.keys(d.sizes).sort();
+            if(sizes.length>0){
+                html+='<div style="margin-top:0.3rem;font-size:0.65rem;color:#374151">';
+                sizes.forEach(function(sz){html+='<span style="display:inline-block;background:#f3f4f6;border-radius:4px;padding:0.1rem 0.4rem;margin:0.1rem;font-weight:500">'+sz+'" × '+d.sizes[sz]+'</span>';});
+                html+='</div>';
+            }
             html+='<div class="cc-skus">'+d.skus.join(', ')+'</div></div>';
         });
         html+='</div>';
@@ -631,13 +654,13 @@ function buildCardDetails(upload){
     html+='</div></details>';
     // ===== Label detail table (no assign column) =====
     html+='<details><summary style="cursor:pointer;font-weight:600;font-size:0.8rem;color:#92400e;padding:0.5rem 0">📋 All Labels ('+all.length+')</summary>';
-    html+='<div style="overflow-x:auto;max-height:350px;margin-top:0.5rem"><table><thead><tr><th>Order ID</th><th>SKU</th><th>Category</th><th>Status</th></tr></thead><tbody>';
+    html+='<div style="overflow-x:auto;max-height:350px;margin-top:0.5rem"><table><thead><tr><th>Order ID</th><th>SKU</th><th>Size</th><th>Category</th><th>Status</th></tr></thead><tbody>';
     all.forEach(function(l){
         var match=findCategory(l.sku);
         var catLabel=match?'<span class="cat-chip '+(CAT_COLORS[match.category]||'cat-uncategorized')+'">'+match.category+'</span>':'<span class="cat-chip cat-uncategorized">Uncategorized</span>';
         var statusBadge=l.isDuplicate?'<span class="badge badge-dup">🔁 OLD</span>':'<span class="badge badge-new">🆕 NEW</span>';
         var rowClass=l.isDuplicate?'row-dup':'row-new';
-        html+='<tr class="'+rowClass+'"><td style="font-size:0.55rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeAttr(l.orderId)+'">'+escapeHtml(l.orderId)+'</td><td style="font-size:0.6rem"><b>'+escapeHtml(l.sku)+'</b></td><td>'+catLabel+'</td><td>'+statusBadge+'</td></tr>';
+        html+='<tr class="'+rowClass+'"><td style="font-size:0.55rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeAttr(l.orderId)+'">'+escapeHtml(l.orderId)+'</td><td style="font-size:0.6rem"><b>'+escapeHtml(l.sku)+'</b></td><td style="font-weight:600">'+(l.size||'-')+'"</td><td>'+catLabel+'</td><td>'+statusBadge+'</td></tr>';
     });
     html+='</tbody></table></div></details>';
     return html;
@@ -684,6 +707,29 @@ function extractSku(text,items){
     for(var j=skuIdx+1;j<Math.min(skuIdx+5,items.length);j++){
         var val=items[j].trim();
         if(val.length>=2&&!/^(Size|Qty|Color|Order|Quantity|No\.?)$/i.test(val))return val;
+    }
+    return null;
+}
+
+function extractSize(text,items){
+    // Find "Size" header, then look for value like 2.2, 2.4 etc after data row starts
+    var sizeIdx=-1;
+    for(var i=0;i<items.length;i++){if(/^Size$/i.test(items[i].trim())){sizeIdx=i;break;}}
+    if(sizeIdx===-1){
+        // Fallback: find pattern like 2.0-2.12 in text
+        var m=text.match(/\b(2\.\d{1,2})\b/);
+        return m?m[1]:null;
+    }
+    // Find "Order No." header to know where headers end
+    var lastHeaderIdx=sizeIdx;
+    for(var i=sizeIdx+1;i<Math.min(sizeIdx+8,items.length);i++){
+        var t=items[i].trim();
+        if(/^(Qty|Quantity|Color|Colour|Order\s*No\.?)$/i.test(t))lastHeaderIdx=i;
+    }
+    // Scan after headers for size value (decimal number like 2.2)
+    for(var j=lastHeaderIdx+1;j<Math.min(lastHeaderIdx+15,items.length);j++){
+        var val=items[j].trim();
+        if(/^\d+\.\d{1,2}$/.test(val)&&parseFloat(val)>=1.5&&parseFloat(val)<=3.5)return val;
     }
     return null;
 }
