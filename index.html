@@ -923,11 +923,17 @@ window.handleFileUpload=async function(input){
                 }
             }
 
-            // ===== IMPORT DATA =====
+            // ===== IMPORT DATA (BATCH MODE) =====
             var imp=0,skip=0,upd=0,errors=0,emptyRows=0;
             var totalDataRows=rows.length-dataStartRow;
             console.log('Starting import: '+totalDataRows+' data rows from row '+dataStartRow);
             console.log('Column mapping:', JSON.stringify(cm));
+
+            // Step 1: Parse ALL rows first (no API calls)
+            var parsedNew=[];
+            var parsedUpdate=[];
+            var existingMap={};
+            ordersData.forEach(function(o){existingMap[o.order_id]=o;});
 
             for(var r=dataStartRow;r<rows.length;r++){
                 var row=rows[r];
@@ -935,8 +941,6 @@ window.handleFileUpload=async function(input){
 
                 var oid=(row[cm.orderId]||'').toString().trim();
                 if(!oid||oid.length<3){emptyRows++;continue;}
-
-                var existing=ordersData.find(function(o){return o.order_id===oid;});
 
                 // ===== STATUS MAPPING =====
                 var rawStatus=(row[cm.status]!==undefined?row[cm.status]:'').toString().trim();
@@ -981,54 +985,64 @@ window.handleFileUpload=async function(input){
                 var received=cm.received!==undefined?parseFloat(row[cm.received])||0:0;
                 var qty=cm.qty!==undefined?parseInt(row[cm.qty])||1:1;
 
-                // Log first 5 rows for debugging
-                if(r-dataStartRow<5)console.log('Row '+r+': id='+oid+', date='+od+', status='+status+', amt='+amount+', recv='+received);
+                // Log first 5 rows
+                if(parsedNew.length+parsedUpdate.length<5)console.log('Row '+r+': id='+oid+', date='+od+', status='+status+', amt='+amount+', recv='+received);
 
+                var existing=existingMap[oid];
                 if(existing){
-                    try{
-                        // UPDATE ALL FIELDS - never lose data on re-import
-                        var updateObj={
-                            status:status,
-                            amount:amount,
-                            received:received,
-                            qty:qty,
-                            order_date:od||existing.order_date,
-                            items:productName||existing.items,
-                            platform:'meesho'
-                        };
-                        if(size)updateObj.size=size;
-                        if(state)updateObj.state=state;
-                        if(sku)updateObj.remark=sku;
-                        await db.from('orders').update(updateObj).eq('id',existing.id);
-                        upd++;
-                    }catch(err){errors++;console.error('Update err row '+r+' ('+oid+'):',err.message);}
+                    parsedUpdate.push({id:existing.id,data:{status:status,amount:amount,received:received,qty:qty,order_date:od||existing.order_date,items:productName||existing.items,platform:'meesho',size:size||existing.size,state:state||existing.state,remark:sku||existing.remark}});
                 } else {
-                    try{
-                        await db.from('orders').insert({
-                            order_id:oid,
-                            items:productName,
-                            size:size,
-                            qty:qty,
-                            state:state,
-                            amount:amount,
-                            received:received,
-                            status:status,
-                            platform:'meesho',
-                            remark:sku,
-                            order_date:od||new Date().toISOString().split('T')[0]
-                        });
-                        imp++;
-                    }catch(err){
-                        skip++;
-                        console.error('Insert err row '+r+' ('+oid+'):',err.message);
-                    }
-                }
-
-                // Progress update every 50 rows
-                if((r-dataStartRow)%50===0&&r>dataStartRow){
-                    statusDiv.innerHTML='<div class="alert alert-info">Processing... '+Math.round((r-dataStartRow)/totalDataRows*100)+'% ('+imp+' new, '+upd+' updated)</div>';
+                    parsedNew.push({order_id:oid,items:productName,size:size,qty:qty,state:state,amount:amount,received:received,status:status,platform:'meesho',remark:sku,order_date:od||new Date().toISOString().split('T')[0]});
                 }
             }
+
+            console.log('Parsed: '+parsedNew.length+' new, '+parsedUpdate.length+' updates, '+emptyRows+' empty');
+            statusDiv.innerHTML='<div class="alert alert-info">Parsed '+totalDataRows+' rows. Saving '+parsedNew.length+' new + '+parsedUpdate.length+' updates...</div>';
+
+            // Step 2: Batch INSERT new orders (50 at a time)
+            var BATCH=50;
+            for(var b=0;b<parsedNew.length;b+=BATCH){
+                var batch=parsedNew.slice(b,b+BATCH);
+                try{
+                    var res=await db.from('orders').insert(batch);
+                    if(res.error){
+                        console.error('Batch insert error at '+b+':',res.error.message);
+                        // Fallback: try one-by-one for this batch
+                        for(var bi=0;bi<batch.length;bi++){
+                            try{
+                                var r2=await db.from('orders').insert(batch[bi]);
+                                if(r2.error){skip++;console.error('Single insert err:',batch[bi].order_id,r2.error.message);}
+                                else imp++;
+                            }catch(e2){skip++;console.error('Single insert exception:',batch[bi].order_id,e2.message);}
+                        }
+                    } else {
+                        imp+=batch.length;
+                    }
+                }catch(err){
+                    errors+=batch.length;
+                    console.error('Batch insert exception at '+b+':',err.message);
+                }
+                // Progress
+                var pctNew=Math.round((Math.min(b+BATCH,parsedNew.length))/Math.max(parsedNew.length,1)*50);
+                statusDiv.innerHTML='<div class="alert alert-info">Inserting new orders... '+pctNew+'% ('+imp+'/'+parsedNew.length+')</div>';
+                // Small delay to avoid rate limits
+                await new Promise(function(resolve){setTimeout(resolve,100);});
+            }
+
+            // Step 3: Batch UPDATE existing orders (one-by-one but with delay)
+            for(var u=0;u<parsedUpdate.length;u++){
+                try{
+                    var res=await db.from('orders').update(parsedUpdate[u].data).eq('id',parsedUpdate[u].id);
+                    if(res.error){errors++;console.error('Update err id='+parsedUpdate[u].id+':',res.error.message);}
+                    else upd++;
+                }catch(err){errors++;console.error('Update exception:',err.message);}
+                // Progress + delay every 50
+                if(u%BATCH===0&&u>0){
+                    statusDiv.innerHTML='<div class="alert alert-info">Updating orders... '+(50+Math.round(u/Math.max(parsedUpdate.length,1)*50))+'% ('+upd+'/'+parsedUpdate.length+')</div>';
+                    await new Promise(function(resolve){setTimeout(resolve,100);});
+                }
+            }
+
             await loadOrders();
             statusDiv.innerHTML='<div class="alert alert-success">✅ Import done!<br><b>'+imp+'</b> new | <b>'+upd+'</b> updated | <b>'+skip+'</b> skipped'+(errors>0?' | <b>'+errors+'</b> errors':'')+(emptyRows>0?' | <b>'+emptyRows+'</b> empty rows':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Total in file: '+totalDataRows+' rows | Processed: '+(imp+upd+skip+errors)+' orders</span></div>';
             // Build month-wise summary
