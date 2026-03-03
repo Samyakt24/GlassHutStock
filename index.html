@@ -198,6 +198,36 @@
         .dup-stat.dup-stat-bg { background: #fee2e2; }
         .dup-stat.dup-stat-bg .ds-num { color: #dc2626; }
         
+        /* MONTHLY TAB STYLES */
+        .month-card { background: white; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 1rem; overflow: hidden; border-left: 5px solid #f59e0b; }
+        .month-card-head { padding: 0.9rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; transition: background 0.2s; }
+        .month-card-head:hover { background: #fffbeb; }
+        .month-card-head .month-title { font-weight: 700; font-size: 1rem; color: #92400e; display: flex; align-items: center; gap: 0.5rem; }
+        .month-card-head .month-title .arrow { transition: transform 0.3s; display: inline-block; }
+        .month-card-head .month-title .arrow.open { transform: rotate(90deg); }
+        .month-card-head .month-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.7rem; }
+        .month-pill { padding: 0.25rem 0.6rem; border-radius: 10px; font-weight: 600; }
+        .mp-total { background: #f3f4f6; color: #374151; }
+        .mp-sale { background: #fef3c7; color: #92400e; }
+        .mp-recv { background: #d1fae5; color: #065f46; }
+        .mp-del { background: #dbeafe; color: #1e40af; }
+        .mp-rto { background: #fee2e2; color: #991b1b; }
+        .month-card-body { display: none; border-top: 1px solid #fef3c7; padding: 1rem; }
+        .month-card-body.open { display: block; }
+        .month-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+        .month-stat { background: #fffbeb; border-radius: 10px; padding: 0.75rem; text-align: center; border: 1px solid #fde68a; }
+        .month-stat .ms-label { font-size: 0.65rem; color: #6b7280; }
+        .month-stat .ms-val { font-size: 1.3rem; font-weight: 700; }
+        .plat-breakdown { margin-top: 0.75rem; }
+        .plat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border-bottom: 1px solid #fef3c7; font-size: 0.8rem; }
+        .plat-row:last-child { border-bottom: none; }
+        .plat-row .plat-name { font-weight: 600; }
+        .plat-row .plat-nums { display: flex; gap: 1rem; font-size: 0.7rem; }
+        .year-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+        .year-card { background: white; border-radius: 12px; padding: 1rem; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+        .year-card .yc-label { font-size: 0.65rem; color: #6b7280; }
+        .year-card .yc-val { font-size: 1.4rem; font-weight: 700; }
+        
         @media (max-width: 768px) {
             .form-row { flex-direction: column; }
             .form-grp { min-width: 100%; }
@@ -211,6 +241,8 @@
             .dup-summary { gap: 0.5rem; }
             .dup-stat { min-width: 80px; padding: 0.4rem 0.6rem; }
             .dup-stat .ds-num { font-size: 1.2rem; }
+            .month-grid { grid-template-columns: 1fr 1fr; }
+            .year-summary { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -248,6 +280,7 @@
             <button class="tab-btn active" data-tab="dashboard">📊 Dash</button>
             <button class="tab-btn" data-tab="stock">📦 Stock</button>
             <button class="tab-btn" data-tab="orders">🛒 Orders</button>
+            <button class="tab-btn" data-tab="monthly">📅 Monthly</button>
             <button class="tab-btn" data-tab="sku">🏷️ SKU</button>
             <button class="tab-btn" data-tab="labels">📄 Labels</button>
         </div></nav>
@@ -267,6 +300,7 @@
                     <div class="card"><div class="card-header">📦 Low Stock</div><div class="card-body" id="dashLow"><div class="loading">Loading...</div></div></div>
                     <div class="card"><div class="card-header">🕐 Recent Orders</div><div class="card-body" id="dashRecent"><div class="loading">Loading...</div></div></div>
                 </div>
+                <div class="card" style="margin-top:1rem"><div class="card-header">🏆 Top 5 Selling SKUs (by Units)</div><div class="card-body" id="dashTopSku"><div class="loading">Loading...</div></div></div>
             </div>
             
             <!-- STOCK -->
@@ -350,6 +384,11 @@
                 </div>
             </div>
             
+            <!-- MONTHLY -->
+            <div class="tab-content" id="tab-monthly">
+                <div id="monthlyContent"><div class="loading">Loading...</div></div>
+            </div>
+            
             <!-- SKU -->
             <div class="tab-content" id="tab-sku">
                 <div class="form-box">
@@ -427,9 +466,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/p
 
 const CATEGORIES=['Light Multi 24','Light Multi 12','Dark Multi 24','Dark Multi 12','GOLD Multi 24'];
 const CAT_COLORS={'Light Multi 24':'cat-light24','Light Multi 12':'cat-light12','Dark Multi 24':'cat-dark24','Dark Multi 12':'cat-dark12','GOLD Multi 24':'cat-gold24','Uncategorized':'cat-uncategorized'};
+const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 let stockData=[],ordersData=[],skuData=[],scanHistory=[];
 let platform='meesho',filterPlat='all',filterStatus='all',currentUser=null;
+let openMonthKey=null;
 
 // AUTH
 function showError(msg){var el=document.getElementById('loginError');el.textContent=msg;el.style.display='block';}
@@ -448,7 +489,7 @@ function setStatus(msg,type){var bar=document.getElementById('statusBar');bar.te
 
 // DATA
 async function loadStock(){try{var r=await db.from('stock').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);stockData=r.data||[];renderStock();renderDashboard();populateItemDropdown();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
-async function loadOrders(){try{var r=await db.from('orders').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);ordersData=r.data||[];renderOrders();renderDashboard();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
+async function loadOrders(){try{var r=await db.from('orders').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);ordersData=r.data||[];renderOrders();renderDashboard();renderMonthly();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
 async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('category',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){skuData=[];renderSkus();document.getElementById('skuContainer').innerHTML='<div class="alert alert-danger">⚠️ Table <b>sku_map</b> not found. Create it in Supabase SQL Editor.</div>';return true;}throw new Error(r.error.message);}skuData=r.data||[];renderSkus();return true;}catch(err){skuData=[];renderSkus();return true;}}
 async function loadScanHistory(){try{var r=await db.from('scan_history').select('*');if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){scanHistory=[];return true;}throw new Error(r.error.message);}scanHistory=r.data||[];return true;}catch(err){scanHistory=[];return true;}}
 async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();if(s&&o)setStatus('✅ Connected');}
@@ -487,16 +528,14 @@ function renderSkus(){
     c.innerHTML=html;
 }
 
-// PDF PARSING — Card-based history
-var pdfUploads=[]; // [{id,name,date,labels:[{orderId,sku,isDuplicate,page}]}]
+// PDF PARSING
+var pdfUploads=[];
 var openCardId=null;
 
-// Save PDF upload to Supabase
 async function savePdfUpload(upload){
     try{var r=await db.from('pdf_uploads').insert({file_name:upload.name,upload_date:new Date().toISOString(),labels:upload.labels,new_count:upload.newCount,dup_count:upload.dupCount});
         if(r.error)throw new Error(r.error.message);
     }catch(err){console.error('Save PDF error:',err);}}
-// Load all PDF uploads from Supabase
 async function loadPdfHistory(){
     try{var r=await db.from('pdf_uploads').select('*').order('created_at',{ascending:false});
         if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){pdfUploads=[];renderPdfHistory();return;}throw new Error(r.error.message);}
@@ -528,7 +567,6 @@ window.handlePdfUpload=async function(input){
             }
         }
         if(labels.length===0){statusDiv.innerHTML='<div class="alert alert-danger">❌ No labels found in "'+escapeHtml(file.name)+'".</div>';setStatus('❌ No labels','error');input.value='';return;}
-        // Auto-save new order IDs to scan_history
         var newToSave=labels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
         if(newToSave.length>0){
             var today=new Date().toISOString().split('T')[0];
@@ -538,11 +576,9 @@ window.handlePdfUpload=async function(input){
         }
         var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
         var dp=labels.filter(function(l){return l.isDuplicate;}).length;
-        // Save to Supabase
         var upload={name:file.name,labels:labels,newCount:nw,dupCount:dp};
         await savePdfUpload(upload);
         await loadPdfHistory();
-        // Auto-open latest
         if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
         renderPdfHistory();
         statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'</div>';
@@ -590,7 +626,6 @@ function buildCardDetails(upload){
     var newLabels=all.filter(function(l){return !l.isDuplicate;});
     var dupLabels=all.filter(function(l){return l.isDuplicate;});
     var html='';
-    // Category counts for NEW only (what to pack)
     var packCounts={};var allCounts={};
     CATEGORIES.forEach(function(c){packCounts[c]={count:0,skus:[],sizes:{}};allCounts[c]={total:0,newC:0,dupC:0};});
     packCounts['Uncategorized']={count:0,skus:[],sizes:{}};allCounts['Uncategorized']={total:0,newC:0,dupC:0};
@@ -611,11 +646,9 @@ function buildCardDetails(upload){
             packCounts[cat].sizes[sz]=(packCounts[cat].sizes[sz]||0)+1;
         }
     });
-    // Unmapped SKU warning
     if(unmapped.length>0){
         html+='<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:0.6rem;margin-bottom:0.75rem;font-size:0.7rem;color:#92400e">⚠️ <b>'+unmapped.length+' SKU(s) not mapped</b> — go to <b>SKU tab</b> to assign: '+unmapped.map(function(s){return'<b>'+escapeHtml(s)+'</b>';}).join(', ')+'</div>';
     }
-    // ===== PACK TODAY section =====
     var totalPack=newLabels.length;
     html+='<div style="background:linear-gradient(135deg,#d1fae5,#ecfdf5);border:2px solid #6ee7b7;border-radius:12px;padding:1rem;margin-bottom:1rem">';
     html+='<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem">';
@@ -628,7 +661,6 @@ function buildCardDetails(upload){
             var d=packCounts[cat];if(!d||d.count===0)return;
             var bc='#10b981';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
             html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+cat+'</div><div class="cc-count" style="color:'+bc+'">'+d.count+'</div>';
-            // Size breakdown
             var sizes=Object.keys(d.sizes).sort();
             if(sizes.length>0){
                 html+='<div style="margin-top:0.3rem;font-size:0.65rem;color:#374151">';
@@ -642,7 +674,6 @@ function buildCardDetails(upload){
         html+='<div style="text-align:center;padding:0.5rem;color:#065f46;font-size:0.85rem">✅ All orders already packed! Nothing new to pack.</div>';
     }
     html+='</div>';
-    // ===== Full breakdown (collapsible) =====
     html+='<details style="margin-bottom:0.75rem"><summary style="cursor:pointer;font-weight:600;font-size:0.8rem;color:#92400e;padding:0.5rem 0">📊 Full Breakdown (All '+all.length+' labels)</summary>';
     html+='<div class="count-grid" style="margin-top:0.5rem">';
     CATEGORIES.concat(['Uncategorized']).forEach(function(cat){
@@ -652,7 +683,6 @@ function buildCardDetails(upload){
         html+='<div class="cc-sub"><span style="color:#059669">🆕 '+d.newC+'</span> <span style="color:#dc2626">🔁 '+d.dupC+'</span></div></div>';
     });
     html+='</div></details>';
-    // ===== Label detail table (no assign column) =====
     html+='<details><summary style="cursor:pointer;font-weight:600;font-size:0.8rem;color:#92400e;padding:0.5rem 0">📋 All Labels ('+all.length+')</summary>';
     html+='<div style="overflow-x:auto;max-height:350px;margin-top:0.5rem"><table><thead><tr><th>Order ID</th><th>SKU</th><th>Size</th><th>Category</th><th>Status</th></tr></thead><tbody>';
     all.forEach(function(l){
@@ -712,21 +742,17 @@ function extractSku(text,items){
 }
 
 function extractSize(text,items){
-    // Find "Size" header, then look for value like 2.2, 2.4 etc after data row starts
     var sizeIdx=-1;
     for(var i=0;i<items.length;i++){if(/^Size$/i.test(items[i].trim())){sizeIdx=i;break;}}
     if(sizeIdx===-1){
-        // Fallback: find pattern like 2.0-2.12 in text
         var m=text.match(/\b(2\.\d{1,2})\b/);
         return m?m[1]:null;
     }
-    // Find "Order No." header to know where headers end
     var lastHeaderIdx=sizeIdx;
     for(var i=sizeIdx+1;i<Math.min(sizeIdx+8,items.length);i++){
         var t=items[i].trim();
         if(/^(Qty|Quantity|Color|Colour|Order\s*No\.?)$/i.test(t))lastHeaderIdx=i;
     }
-    // Scan after headers for size value (decimal number like 2.2)
     for(var j=lastHeaderIdx+1;j<Math.min(lastHeaderIdx+15,items.length);j++){
         var val=items[j].trim();
         if(/^\d+\.\d{1,2}$/.test(val)&&parseFloat(val)>=1.5&&parseFloat(val)<=3.5)return val;
@@ -774,43 +800,219 @@ window.delOrder=async function(id){if(!confirm('Delete?'))return;try{await db.fr
 window.updateRemark=async function(id,val){try{await db.from('orders').update({remark:val||null}).eq('id',id);setStatus('✅ Saved');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.closeModal=function(){document.querySelectorAll('.modal-bg').forEach(function(m){m.classList.remove('show');});};
 
-// FILE UPLOAD
+// ============================================
+// FIXED FILE UPLOAD - Meesho Payment File
+// ============================================
 window.handleFileUpload=async function(input){
     var file=input.files[0];if(!file)return;var statusDiv=document.getElementById('importStatus');
-    statusDiv.innerHTML='<div class="alert alert-success">📊 Reading file...</div>';setStatus('🔄 Importing...','syncing');
+    statusDiv.innerHTML='<div class="alert alert-info">📊 Reading file... Please wait.</div>';setStatus('🔄 Importing...','syncing');
     var isCSV=file.name.toLowerCase().endsWith('.csv');var reader=new FileReader();
     reader.onload=async function(e){
         try{var rows=[];
-            if(isCSV){var text=e.target.result;var lines=text.split('\n');for(var i=0;i<lines.length;i++){var row=[];var line=lines[i];var inQ=false,val='';for(var j=0;j<line.length;j++){var c=line[j];if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){row.push(val.trim());val='';}else{val+=c;}}row.push(val.trim());if(row.length>1)rows.push(row);}}
-            else{var data=new Uint8Array(e.target.result);var wb=XLSX.read(data,{type:'array'});var sn=wb.SheetNames.find(function(n){return n.includes('Order');})||wb.SheetNames[1]||wb.SheetNames[0];rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1});}
-            var hRow=-1;for(var i=0;i<Math.min(10,rows.length);i++){var row=rows[i];if(row&&row.some(function(c){return c&&(c.toString().includes('Sub Order')||c.toString().includes('Order No'));})){hRow=i;break;}}
-            if(hRow===-1){statusDiv.innerHTML='<div class="alert alert-danger">❌ No order data found</div>';return;}
-            var headers=rows[hRow];var cm={};
-            headers.forEach(function(h,idx){if(!h)return;var hl=h.toString().toLowerCase();
-                if(hl.includes('sub order')||hl.includes('order no'))cm.orderId=idx;
-                if(hl.includes('order date')&&cm.date===undefined)cm.date=idx;
-                if(hl.includes('product name'))cm.product=idx;
-                if(hl.includes('sku'))cm.sku=idx;
-                if(hl==='size'||hl.includes('size'))cm.size=idx;
-                if(hl.includes('quantity'))cm.qty=idx;
-                if(hl.includes('customer state')||hl==='state')cm.state=idx;
-                if(hl.includes('reason')||hl.includes('status')||hl.includes('live order'))cm.status=idx;
-                if(hl.includes('final settlement'))cm.received=idx;
-                if((hl.includes('supplier')&&hl.includes('price'))||(hl.includes('total sale')&&!hl.includes('return')))cm.amount=idx;
-            });
-            var imp=0,skip=0,upd=0;
-            for(var r=hRow+1;r<rows.length;r++){
-                var row=rows[r];if(!row||!row[cm.orderId])continue;var oid=row[cm.orderId].toString().trim();if(oid.length<5)continue;
-                var existing=ordersData.find(function(o){return o.order_id===oid;});
-                var status=row[cm.status]?row[cm.status].toString():'Pending';
-                if(status.toLowerCase().includes('deliver'))status='Delivered';else if(status.toLowerCase().includes('rto')||status.toLowerCase().includes('return'))status='RTO';else status='Pending';
-                var od='';if(row[cm.date]){var d=row[cm.date];if(typeof d==='number'){od=new Date((d-25569)*86400*1000).toISOString().split('T')[0];}else{od=d.toString().split(' ')[0].split('T')[0];}}
-                var sku=row[cm.sku]?row[cm.sku].toString().trim():'';var size=row[cm.size]?row[cm.size].toString().trim():'';var state=row[cm.state]?row[cm.state].toString().trim():'';
-                if(existing){try{await db.from('orders').update({status:status,size:size||existing.size,state:state||existing.state,remark:sku||existing.remark}).eq('id',existing.id);upd++;}catch(err){}}
-                else{try{await db.from('orders').insert({order_id:oid,items:row[cm.product]?row[cm.product].toString().substring(0,200):'',size:size,qty:parseInt(row[cm.qty])||1,state:state,amount:parseFloat(row[cm.amount])||0,received:parseFloat(row[cm.received])||0,status:status,platform:'meesho',remark:sku,order_date:od||new Date().toISOString().split('T')[0]});imp++;}catch(err){skip++;}}
+            if(isCSV){
+                var text=e.target.result;
+                var lines=text.split('\n');
+                for(var i=0;i<lines.length;i++){
+                    var row=[];var line=lines[i];var inQ=false,val='';
+                    for(var j=0;j<line.length;j++){
+                        var c=line[j];
+                        if(c==='"'){inQ=!inQ;}
+                        else if(c===','&&!inQ){row.push(val.trim());val='';}
+                        else{val+=c;}
+                    }
+                    row.push(val.trim());
+                    if(row.length>1)rows.push(row);
+                }
+            } else {
+                var data=new Uint8Array(e.target.result);
+                var wb=XLSX.read(data,{type:'array',cellDates:false});
+                // Find the right sheet: prefer "Order Payments" or any sheet with "Order"
+                var sn=wb.SheetNames.find(function(n){return n==='Order Payments';})||wb.SheetNames.find(function(n){return n.includes('Order');})||wb.SheetNames[1]||wb.SheetNames[0];
+                rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
             }
-            await loadOrders();statusDiv.innerHTML='<div class="alert alert-success">✅ New: <b>'+imp+'</b> | Updated: <b>'+upd+'</b> | Skipped: <b>'+skip+'</b></div>';setStatus('✅ Import done!');input.value='';
-        }catch(err){statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';setStatus('❌ Failed','error');}
+
+            // ===== FIND HEADER ROW =====
+            // Meesho payment files have: Row 0 = merged category, Row 1 = actual headers, Row 2 = formula row
+            var hRow=-1;
+            for(var i=0;i<Math.min(10,rows.length);i++){
+                var row=rows[i];
+                if(!row)continue;
+                for(var k=0;k<row.length;k++){
+                    var cell=(row[k]||'').toString();
+                    if(cell==='Sub Order No'||cell.includes('Sub Order')){hRow=i;break;}
+                }
+                if(hRow>=0)break;
+            }
+            if(hRow===-1){
+                // Fallback: look for "Order No" anywhere
+                for(var i=0;i<Math.min(10,rows.length);i++){
+                    var row=rows[i];
+                    if(row&&row.some(function(c){return c&&c.toString().includes('Order No');})){hRow=i;break;}
+                }
+            }
+            if(hRow===-1){statusDiv.innerHTML='<div class="alert alert-danger">❌ No order headers found. Make sure this is a Meesho payment/order file.</div>';setStatus('❌ No headers','error');input.value='';return;}
+
+            var headers=rows[hRow];
+            var cm={};
+
+            // ===== COLUMN MAPPING (FIXED) =====
+            headers.forEach(function(h,idx){
+                if(!h)return;
+                var hl=h.toString().toLowerCase().trim();
+
+                // Order ID — "Sub Order No" or "Order No"
+                if(hl==='sub order no'||hl.includes('sub order'))cm.orderId=idx;
+                else if(!cm.orderId&&hl.includes('order no'))cm.orderId=idx;
+
+                // Order Date
+                if(hl==='order date')cm.date=idx;
+
+                // Dispatch Date (fallback for date)
+                if(hl==='dispatch date'&&cm.date===undefined)cm.date=idx;
+
+                // Product Name
+                if(hl.includes('product name'))cm.product=idx;
+
+                // SKU — "Supplier SKU" or just "SKU"
+                if(hl==='supplier sku'||hl==='sku')cm.sku=idx;
+
+                // Size (may not exist in payment files)
+                if(hl==='size')cm.size=idx;
+
+                // Quantity
+                if(hl==='quantity')cm.qty=idx;
+
+                // Customer State
+                if(hl==='customer state'||hl==='state')cm.state=idx;
+
+                // Status — ONLY match "Live Order Status" or exact "Status", NOT "reason" columns
+                if(hl==='live order status'||hl==='order status')cm.status=idx;
+                else if(hl==='status'&&cm.status===undefined)cm.status=idx;
+
+                // Final Settlement Amount → received
+                if(hl.includes('final settlement'))cm.received=idx;
+
+                // Total Sale Amount (not return) → amount
+                if(hl==='total sale amount (incl. shipping & gst)')cm.amount=idx;
+                else if(hl.includes('total sale')&&!hl.includes('return')&&cm.amount===undefined)cm.amount=idx;
+                // Fallback: supplier price
+                else if((hl.includes('supplier')&&hl.includes('price'))&&cm.amount===undefined)cm.amount=idx;
+                // Fallback: listing price
+                else if(hl.includes('listing price')&&cm.amount===undefined)cm.listingPrice=idx;
+            });
+
+            // If no amount column found, use listing price
+            if(cm.amount===undefined&&cm.listingPrice!==undefined)cm.amount=cm.listingPrice;
+
+            console.log('Column mapping:', JSON.stringify(cm));
+            console.log('Header row:', hRow, 'Headers:', headers.slice(0,15));
+
+            // ===== SKIP FORMULA ROW =====
+            // Meesho files have a formula explanation row right after headers (Row 2)
+            // Detect it: if the row after header has formulas like "(B + C + ...)" or starts with empty/null orderId
+            var dataStartRow=hRow+1;
+            if(dataStartRow<rows.length){
+                var testRow=rows[dataStartRow];
+                if(testRow){
+                    var testId=(testRow[cm.orderId]||'').toString().trim();
+                    // If first data cell is empty or looks like a formula, skip this row
+                    if(!testId||testId.startsWith('(')||testId.length<5){
+                        dataStartRow++;
+                        console.log('Skipping formula row at', hRow+1);
+                    }
+                }
+            }
+
+            // ===== IMPORT DATA =====
+            var imp=0,skip=0,upd=0,errors=0;
+            for(var r=dataStartRow;r<rows.length;r++){
+                var row=rows[r];
+                if(!row)continue;
+
+                var oid=(row[cm.orderId]||'').toString().trim();
+                if(!oid||oid.length<5)continue;
+
+                var existing=ordersData.find(function(o){return o.order_id===oid;});
+
+                // ===== STATUS MAPPING (FIXED) =====
+                var rawStatus=(row[cm.status]!==undefined?row[cm.status]:'').toString().trim();
+                var status='Pending';
+                var sl=rawStatus.toLowerCase();
+                if(sl==='delivered'||sl.includes('deliver'))status='Delivered';
+                else if(sl==='rto'||sl==='return'||sl==='exchange'||sl.includes('rto')||sl.includes('return'))status='RTO';
+                else if(sl==='shipped'||sl==='dispatched'||sl.includes('ship'))status='Pending';
+                else if(rawStatus)status='Pending';
+
+                // Date parsing
+                var od='';
+                if(cm.date!==undefined&&row[cm.date]){
+                    var d=row[cm.date];
+                    if(typeof d==='number'){
+                        od=new Date((d-25569)*86400*1000).toISOString().split('T')[0];
+                    }else{
+                        var ds=d.toString().trim();
+                        // Handle "2026-01-23 12:12:19" format
+                        if(ds.includes(' '))ds=ds.split(' ')[0];
+                        if(ds.includes('T'))ds=ds.split('T')[0];
+                        // Handle "23.01.2026" or "23/01/2026" format
+                        if(/^\d{2}[.\/]\d{2}[.\/]\d{4}$/.test(ds)){
+                            var parts=ds.split(/[.\/]/);
+                            od=parts[2]+'-'+parts[1]+'-'+parts[0];
+                        }else{
+                            od=ds;
+                        }
+                    }
+                }
+
+                var sku=(cm.sku!==undefined&&row[cm.sku])?row[cm.sku].toString().trim():'';
+                var size=(cm.size!==undefined&&row[cm.size])?row[cm.size].toString().trim():'';
+                var state=(cm.state!==undefined&&row[cm.state])?row[cm.state].toString().trim():'';
+                var productName=(cm.product!==undefined&&row[cm.product])?row[cm.product].toString().substring(0,200):'';
+                var amount=cm.amount!==undefined?parseFloat(row[cm.amount])||0:0;
+                var received=cm.received!==undefined?parseFloat(row[cm.received])||0:0;
+                var qty=cm.qty!==undefined?parseInt(row[cm.qty])||1:1;
+
+                if(existing){
+                    try{
+                        var updateObj={status:status};
+                        if(size)updateObj.size=size;
+                        if(state)updateObj.state=state;
+                        if(sku)updateObj.remark=sku;
+                        if(received!==0)updateObj.received=received;
+                        await db.from('orders').update(updateObj).eq('id',existing.id);
+                        upd++;
+                    }catch(err){errors++;}
+                } else {
+                    try{
+                        await db.from('orders').insert({
+                            order_id:oid,
+                            items:productName,
+                            size:size,
+                            qty:qty,
+                            state:state,
+                            amount:amount,
+                            received:received,
+                            status:status,
+                            platform:'meesho',
+                            remark:sku,
+                            order_date:od||new Date().toISOString().split('T')[0]
+                        });
+                        imp++;
+                    }catch(err){skip++;console.error('Insert error row '+r+':',err.message);}
+                }
+
+                // Progress update every 50 rows
+                if((r-dataStartRow)%50===0&&r>dataStartRow){
+                    statusDiv.innerHTML='<div class="alert alert-info">📊 Processing... '+Math.round((r-dataStartRow)/(rows.length-dataStartRow)*100)+'% ('+imp+' new, '+upd+' updated)</div>';
+                }
+            }
+            await loadOrders();
+            statusDiv.innerHTML='<div class="alert alert-success">✅ Import done! New: <b>'+imp+'</b> | Updated: <b>'+upd+'</b> | Skipped: <b>'+skip+'</b>'+(errors>0?' | Errors: <b>'+errors+'</b>':'')+'</div>';
+            setStatus('✅ Import done!');input.value='';
+        }catch(err){
+            console.error('Import error:',err);
+            statusDiv.innerHTML='<div class="alert alert-danger">❌ Error: '+err.message+'</div>';setStatus('❌ Failed','error');input.value='';
+        }
     };
     if(isCSV){reader.readAsText(file);}else{reader.readAsArrayBuffer(file);}
 };
@@ -822,6 +1024,146 @@ window.exportData=function(){
     ordersData.forEach(function(o){csv+='Order,"'+o.order_id+'","'+(o.remark||'')+'",'+(o.size||'')+','+(o.qty||1)+','+(o.state||'')+','+(o.status||'')+','+o.amount+','+o.received+'\n';});
     var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='glass-hut-'+new Date().toISOString().split('T')[0]+'.csv';a.click();
 };
+
+// ============================================
+// MONTHLY TAB RENDERER
+// ============================================
+window.toggleMonth=function(key){openMonthKey=(openMonthKey===key)?null:key;renderMonthly();};
+
+function renderMonthly(){
+    var container=document.getElementById('monthlyContent');
+    if(!ordersData||ordersData.length===0){container.innerHTML='<div class="empty">No orders yet. Import orders first!</div>';return;}
+
+    // Group orders by YYYY-MM
+    var months={};
+    var totals={orders:0,amount:0,received:0,delivered:0,rto:0,pending:0};
+    ordersData.forEach(function(o){
+        var date=o.order_date||'';
+        var key='Unknown';
+        if(date){
+            // Handle various date formats
+            var parts=date.toString().split('-');
+            if(parts.length>=2)key=parts[0]+'-'+parts[1];
+        }
+        if(!months[key])months[key]={orders:[],amount:0,received:0,delivered:0,rto:0,pending:0,platforms:{}};
+        var m=months[key];
+        m.orders.push(o);
+        m.amount+=o.amount||0;
+        m.received+=o.received||0;
+        if(o.status==='Delivered')m.delivered++;
+        else if(o.status==='RTO')m.rto++;
+        else m.pending++;
+        // Platform breakdown
+        var plat=o.platform||'other';
+        if(!m.platforms[plat])m.platforms[plat]={count:0,amount:0,received:0,delivered:0,rto:0};
+        var p=m.platforms[plat];
+        p.count++;p.amount+=o.amount||0;p.received+=o.received||0;
+        if(o.status==='Delivered')p.delivered++;
+        else if(o.status==='RTO')p.rto++;
+        // Totals
+        totals.orders++;totals.amount+=o.amount||0;totals.received+=o.received||0;
+        if(o.status==='Delivered')totals.delivered++;
+        else if(o.status==='RTO')totals.rto++;
+        else totals.pending++;
+    });
+
+    // Sort months descending (newest first)
+    var sortedKeys=Object.keys(months).filter(function(k){return k!=='Unknown';}).sort().reverse();
+    if(months['Unknown'])sortedKeys.push('Unknown');
+
+    var html='';
+    // Year/All-time summary
+    html+='<div class="year-summary">';
+    html+='<div class="year-card"><div class="yc-label">Total Orders</div><div class="yc-val" style="color:#d97706">'+totals.orders+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Total Sales</div><div class="yc-val" style="color:#d97706">₹'+totals.amount.toLocaleString()+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Total Received</div><div class="yc-val" style="color:#059669">₹'+totals.received.toLocaleString()+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Delivered</div><div class="yc-val" style="color:#2563eb">'+totals.delivered+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">RTO/Return</div><div class="yc-val" style="color:#dc2626">'+totals.rto+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Pending</div><div class="yc-val" style="color:#f59e0b">'+totals.pending+'</div></div>';
+    html+='</div>';
+
+    // Month cards
+    sortedKeys.forEach(function(key){
+        var m=months[key];
+        var isOpen=openMonthKey===key;
+        var totalOrders=m.orders.length;
+        // Format month label
+        var monthLabel=key;
+        if(key!=='Unknown'){
+            var parts=key.split('-');
+            var yr=parts[0];
+            var mo=parseInt(parts[1])-1;
+            monthLabel=MONTH_NAMES[mo]+' '+yr;
+        }
+
+        html+='<div class="month-card">';
+        html+='<div class="month-card-head" onclick="toggleMonth(\''+key+'\')">';
+        html+='<div class="month-title"><span class="arrow'+(isOpen?' open':'')+'">▶</span> 📅 '+monthLabel+'</div>';
+        html+='<div class="month-pills">';
+        html+='<span class="month-pill mp-total">'+totalOrders+' orders</span>';
+        html+='<span class="month-pill mp-sale">₹'+m.amount.toLocaleString()+'</span>';
+        html+='<span class="month-pill mp-recv">₹'+m.received.toLocaleString()+'</span>';
+        html+='<span class="month-pill mp-del">✅ '+m.delivered+'</span>';
+        if(m.rto>0)html+='<span class="month-pill mp-rto">🔄 '+m.rto+'</span>';
+        html+='</div></div>';
+
+        html+='<div class="month-card-body'+(isOpen?' open':'')+'">';
+        if(isOpen){
+            // Stats grid
+            html+='<div class="month-grid">';
+            html+='<div class="month-stat"><div class="ms-label">Total Orders</div><div class="ms-val" style="color:#d97706">'+totalOrders+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">Sales Amount</div><div class="ms-val" style="color:#d97706">₹'+m.amount.toLocaleString()+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">Amount Received</div><div class="ms-val" style="color:#059669">₹'+m.received.toLocaleString()+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">Delivered</div><div class="ms-val" style="color:#2563eb">'+m.delivered+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">RTO / Return</div><div class="ms-val" style="color:#dc2626">'+m.rto+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">Pending / Shipped</div><div class="ms-val" style="color:#f59e0b">'+m.pending+'</div></div>';
+            var profit=m.received;
+            html+='<div class="month-stat" style="border-color:'+(profit>=0?'#6ee7b7':'#fca5a5')+'"><div class="ms-label">Net Received</div><div class="ms-val" style="color:'+(profit>=0?'#059669':'#dc2626')+'">₹'+profit.toLocaleString()+'</div></div>';
+            var delRate=totalOrders>0?Math.round(m.delivered/totalOrders*100):0;
+            html+='<div class="month-stat"><div class="ms-label">Delivery Rate</div><div class="ms-val" style="color:'+(delRate>=70?'#059669':'#dc2626')+'">'+delRate+'%</div></div>';
+            html+='</div>';
+
+            // Platform breakdown
+            var platKeys=Object.keys(m.platforms).sort();
+            if(platKeys.length>0){
+                html+='<div style="margin-top:0.5rem"><h5 style="font-size:0.8rem;color:#92400e;margin-bottom:0.5rem">📊 Platform Breakdown</h5>';
+                html+='<div style="background:#fffbeb;border-radius:10px;overflow:hidden;border:1px solid #fde68a">';
+                html+='<div class="plat-row" style="background:#fef3c7;font-weight:600;font-size:0.7rem"><span class="plat-name">Platform</span><div class="plat-nums"><span style="min-width:50px;text-align:center">Orders</span><span style="min-width:80px;text-align:right">Sales</span><span style="min-width:80px;text-align:right">Received</span><span style="min-width:40px;text-align:center">✅</span><span style="min-width:40px;text-align:center">🔄</span></div></div>';
+                platKeys.forEach(function(pk){
+                    var pd=m.platforms[pk];
+                    var emoji=pk==='meesho'?'🛍️':pk==='amazon'?'📦':pk==='flipkart'?'🛒':'📱';
+                    html+='<div class="plat-row"><span class="plat-name">'+emoji+' '+pk.charAt(0).toUpperCase()+pk.slice(1)+'</span><div class="plat-nums"><span style="min-width:50px;text-align:center;font-weight:600">'+pd.count+'</span><span style="min-width:80px;text-align:right">₹'+pd.amount.toLocaleString()+'</span><span style="min-width:80px;text-align:right;color:#059669">₹'+pd.received.toLocaleString()+'</span><span style="min-width:40px;text-align:center;color:#2563eb">'+pd.delivered+'</span><span style="min-width:40px;text-align:center;color:#dc2626">'+pd.rto+'</span></div></div>';
+                });
+                html+='</div></div>';
+            }
+
+            // SKU Units Sold breakdown
+            var mSkus={};
+            m.orders.forEach(function(o){
+                var sku=o.remark||o.items||'Unknown';
+                if(!mSkus[sku])mSkus[sku]=0;
+                mSkus[sku]+=(o.qty||1);
+            });
+            var mSkuArr=Object.keys(mSkus).map(function(k){return{name:k,units:mSkus[k]};}).sort(function(a,b){return b.units-a.units;});
+            if(mSkuArr.length>0){
+                html+='<div style="margin-top:0.5rem"><h5 style="font-size:0.8rem;color:#92400e;margin-bottom:0.5rem">🏆 Top Selling SKUs (Units Sold)</h5>';
+                html+='<div style="background:#fffbeb;border-radius:10px;overflow:hidden;border:1px solid #fde68a">';
+                html+='<div class="plat-row" style="background:#fef3c7;font-weight:600;font-size:0.7rem"><span class="plat-name">#</span><div class="plat-nums"><span style="min-width:160px">SKU Name</span><span style="min-width:60px;text-align:center">Units</span></div></div>';
+                var mMaxU=mSkuArr[0].units;
+                mSkuArr.forEach(function(sk,si){
+                    var pct=Math.round(sk.units/mMaxU*100);
+                    var cat=findCategory(sk.name);
+                    var catTag=cat?' <span style="background:#fef3c7;color:#92400e;padding:0.05rem 0.2rem;border-radius:3px;font-size:0.5rem">'+escapeHtml(cat.category)+'</span>':'';
+                    html+='<div class="plat-row"><span class="plat-name" style="font-weight:600;color:#d97706;min-width:20px">'+(si+1)+'</span><div class="plat-nums" style="flex:1;flex-direction:column;align-items:stretch"><div style="display:flex;justify-content:space-between;font-size:0.65rem;margin-bottom:0.1rem"><span style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeAttr(sk.name)+'">'+escapeHtml(sk.name)+catTag+'</span><span style="font-weight:700;color:#d97706">'+sk.units+'</span></div><div style="background:#fef3c7;border-radius:3px;height:5px;overflow:hidden"><div style="background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;width:'+pct+'%;border-radius:3px"></div></div></div></div>';
+                });
+                html+='</div></div>';
+            }
+        }
+        html+='</div></div>';
+    });
+
+    container.innerHTML=html;
+}
 
 // RENDERERS
 function renderDashboard(){
@@ -838,6 +1180,32 @@ function renderDashboard(){
     document.getElementById('alertBox').innerHTML=low.length>0?'<div class="alert alert-danger">⚠️ Low: '+low.map(function(x){return x.name+'('+x.qty+')';}).join(', ')+'</div>':'';
     document.getElementById('dashLow').innerHTML=low.length>0?low.slice(0,5).map(function(x){return'<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #fef3c7;font-size:0.75rem"><span>'+x.name+'</span><span style="color:#dc2626">'+x.qty+'</span></div>';}).join(''):'<div class="empty">All OK ✅</div>';
     document.getElementById('dashRecent').innerHTML=ordersData.length>0?ordersData.slice(0,5).map(function(x){return'<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #fef3c7;font-size:0.7rem"><span>'+(x.remark||x.order_id.substring(0,10)+'..')+' <span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'?')+'</span></span><span>₹'+x.amount+'</span></div>';}).join(''):'<div class="empty">No orders</div>';
+
+    // Top 5 Selling SKUs
+    var skuUnits={};
+    ordersData.forEach(function(o){
+        var sku=o.remark||o.items||'Unknown';
+        if(!skuUnits[sku])skuUnits[sku]={units:0,delivered:0,rto:0};
+        skuUnits[sku].units+=(o.qty||1);
+        if(o.status==='Delivered')skuUnits[sku].delivered+=(o.qty||1);
+        else if(o.status==='RTO')skuUnits[sku].rto+=(o.qty||1);
+    });
+    var skuArr=Object.keys(skuUnits).map(function(k){return{name:k,units:skuUnits[k].units,delivered:skuUnits[k].delivered,rto:skuUnits[k].rto};}).sort(function(a,b){return b.units-a.units;});
+    var top5=skuArr.slice(0,5);
+    var maxU=top5.length>0?top5[0].units:1;
+    document.getElementById('dashTopSku').innerHTML=top5.length>0?
+        '<div style="font-size:0.65rem;color:#92400e;margin-bottom:0.4rem;text-align:right">Total SKUs: '+skuArr.length+'</div>'+
+        top5.map(function(s,i){
+            var pct=Math.round(s.units/maxU*100);
+            var cat=findCategory(s.name);
+            var catBadge=cat?'<span style="background:#fef3c7;color:#92400e;padding:0.1rem 0.3rem;border-radius:4px;font-size:0.55rem;margin-left:0.3rem">'+cat.category+'</span>':'';
+            return '<div style="margin-bottom:0.5rem">'+
+                '<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.7rem;margin-bottom:0.15rem">'+
+                '<span style="font-weight:600;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeAttr(s.name)+'"><span style="color:#d97706;font-weight:700">#'+(i+1)+'</span> '+escapeHtml(s.name)+catBadge+'</span>'+
+                '<span style="font-weight:700;color:#d97706">'+s.units+' units</span></div>'+
+                '<div style="background:#fef3c7;border-radius:4px;height:8px;overflow:hidden"><div style="background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;width:'+pct+'%;border-radius:4px;transition:width 0.3s"></div></div>'+
+                '<div style="display:flex;gap:0.5rem;font-size:0.55rem;color:#78716c;margin-top:0.1rem"><span>✅ '+s.delivered+'</span><span>🔄 '+s.rto+'</span></div></div>';
+        }).join(''):'<div class="empty">No orders</div>';
 }
 function renderStock(){
     document.getElementById('stockCnt').textContent=stockData.length;
@@ -857,8 +1225,6 @@ function renderOrders(){
 // UTILS
 function escapeHtml(str){var d=document.createElement('div');d.textContent=str;return d.innerHTML;}
 function normSku(s){return(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
-
-// Find category: exact match only, else Uncategorized
 function findCategory(sku){
     var exact=skuData.find(function(s){return normSku(s.sku_name)===normSku(sku);});
     if(exact)return{category:exact.category};
