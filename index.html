@@ -320,7 +320,7 @@
                         <div class="form-grp"><label>Cost ₹ *</label><input type="number" id="s-cost" min="0" step="0.01" placeholder="50"></div>
                         <div class="form-grp"><label>Price ₹ *</label><input type="number" id="s-price" min="0" step="0.01" placeholder="100"></div>
                     </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem"><button class="btn btn-sm" onclick="importSkusFromOrders()" style="font-size:0.65rem;background:#f59e0b;color:white">📥 Import SKUs from Orders</button><button class="btn btn-primary" id="addStockBtn">➕ Add</button></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem"><button class="btn btn-sm" onclick="syncSkusManual()" style="font-size:0.65rem;background:#f59e0b;color:white">🔄 Sync SKUs from Orders</button><button class="btn btn-primary" id="addStockBtn">➕ Add</button></div>
                 </div>
                 <div class="card">
                     <div class="card-header"><span>📦 Stock (<span id="stockCnt">0</span>)</span></div>
@@ -500,7 +500,7 @@ function setStatus(msg,type){var bar=document.getElementById('statusBar');bar.te
 
 // DATA
 async function loadStock(){try{var r=await db.from('stock').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);stockData=r.data||[];renderStock();renderDashboard();populateItemDropdown();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
-async function loadOrders(){try{var r=await db.from('orders').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);ordersData=r.data||[];renderOrders();renderDashboard();renderMonthly();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
+async function loadOrders(){try{var r=await db.from('orders').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);ordersData=r.data||[];renderOrders();renderDashboard();renderMonthly();renderStock();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
 async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('category',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){skuData=[];renderSkus();document.getElementById('skuContainer').innerHTML='<div class="alert alert-danger">⚠️ Table <b>sku_map</b> not found. Create it in Supabase SQL Editor.</div>';return true;}throw new Error(r.error.message);}skuData=r.data||[];renderSkus();return true;}catch(err){skuData=[];renderSkus();return true;}}
 async function loadScanHistory(){try{var r=await db.from('scan_history').select('*');if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){scanHistory=[];return true;}throw new Error(r.error.message);}scanHistory=r.data||[];return true;}catch(err){scanHistory=[];return true;}}
 async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();if(s&&o)setStatus('✅ Connected');}
@@ -1101,8 +1101,10 @@ window.handleFileUpload=async function(input){
 
             // Step 4: Reload and verify
             await loadOrders();
+            // Step 5: Auto-sync SKUs to stock
+            var syncResult=await syncSkusToStock(true);
             var afterCount=ordersData.length;
-            var resultHtml='<div class="alert alert-success">Import done!<br><b>'+imp+'</b> new inserted | <b>'+updCount+'</b> updated | <b>'+mergedCount+'</b> fee rows merged'+(errors>0?' | <b style="color:red">'+errors+' errors</b>':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Rows read: '+rows.length+' | Unique orders: '+allOrders.length+' | DB now: '+afterCount+' total</span></div>';
+            var resultHtml='<div class="alert alert-success">Import done!<br><b>'+imp+'</b> new inserted | <b>'+updCount+'</b> updated | <b>'+mergedCount+'</b> fee rows merged'+(syncResult.added>0?' | <b style="color:#f59e0b">'+syncResult.added+' new SKUs added to stock</b>':'')+(errors>0?' | <b style="color:red">'+errors+' errors</b>':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Rows read: '+rows.length+' | Unique orders: '+allOrders.length+' | DB now: '+afterCount+' total</span></div>';
             if(errorMsgs.length>0){
                 resultHtml+='<div class="alert alert-danger" style="margin-top:0.3rem;font-size:0.65rem;max-height:100px;overflow-y:auto"><b>Errors:</b><br>'+errorMsgs.join('<br>')+'</div>';
             }
@@ -1160,50 +1162,42 @@ window.deleteAllOrders=async function(){
     }
 };
 
-window.importSkusFromOrders=async function(){
-    if(!ordersData||ordersData.length===0){alert('No orders found. Upload orders first.');return;}
-    // Get unique SKUs from orders
+// Shared sync function - silent=true for auto-sync after import, false for manual button
+async function syncSkusToStock(silent){
+    var result={added:0,errs:0,total:0,newCount:0};
+    if(!ordersData||ordersData.length===0)return result;
     var orderSkus={};
     ordersData.forEach(function(o){
         var sku=(o.remark||'').trim();
-        if(sku&&sku.length>1&&!orderSkus[sku]){
-            orderSkus[sku]={name:sku,count:0};
-        }
-        if(sku&&orderSkus[sku])orderSkus[sku].count++;
+        if(sku&&sku.length>1&&!orderSkus[sku])orderSkus[sku]={name:sku};
     });
-    var skuList=Object.values(orderSkus);
-    if(skuList.length===0){alert('No SKUs found in orders.');return;}
-    // Check which already exist in stock
+    result.total=Object.keys(orderSkus).length;
+    if(result.total===0)return result;
     var existingNames={};
     stockData.forEach(function(s){existingNames[s.name.toLowerCase().trim()]=true;});
-    var newSkus=skuList.filter(function(s){return !existingNames[s.name.toLowerCase().trim()];});
-    if(newSkus.length===0){alert('All '+skuList.length+' SKUs already exist in stock!');return;}
-    if(!confirm('Found '+skuList.length+' unique SKUs in orders.\n'+newSkus.length+' are new (not in stock yet).\n\nAdd '+newSkus.length+' new SKUs to stock panel?\n(Qty, Cost, Price will be 0 — you can fill later)'))return;
-    setStatus('Adding '+newSkus.length+' SKUs...','syncing');
-    var added=0,errs=0;
-    // Batch insert in groups of 10
+    var newSkus=Object.values(orderSkus).filter(function(s){return !existingNames[s.name.toLowerCase().trim()];});
+    result.newCount=newSkus.length;
+    if(newSkus.length===0)return result;
+    if(!silent&&!confirm('Found '+newSkus.length+' new SKUs not in stock.\nAdd them? (Qty, Cost, Price = 0)'))return result;
     for(var b=0;b<newSkus.length;b+=10){
-        var batch=newSkus.slice(b,b+10).map(function(s){
-            return{name:s.name,size:'2.4',qty:0,cost:0,price:0};
-        });
+        var batch=newSkus.slice(b,b+10).map(function(s){return{name:s.name,size:'2.4',qty:0,cost:0,price:0};});
         try{
             var res=await db.from('stock').insert(batch);
-            if(!res.error)added+=batch.length;
-            else{
-                // Try one by one
-                for(var i=0;i<batch.length;i++){
-                    try{
-                        var r2=await db.from('stock').insert(batch[i]);
-                        if(!r2.error)added++;else errs++;
-                    }catch(e){errs++;}
-                }
-            }
-        }catch(e){errs+=batch.length;}
+            if(!res.error)result.added+=batch.length;
+            else{for(var i=0;i<batch.length;i++){try{var r2=await db.from('stock').insert(batch[i]);if(!r2.error)result.added++;else result.errs++;}catch(e){result.errs++;}}}
+        }catch(e){result.errs+=batch.length;}
         await new Promise(function(ok){setTimeout(ok,200);});
     }
-    await loadStock();renderStock();renderDashboard();
-    setStatus('Added '+added+' SKUs to stock'+(errs>0?', '+errs+' errors':''));
-    alert('Done! Added '+added+' new SKUs to stock.\n'+(errs>0?errs+' errors.\n':'')+'Now go to Stock tab and fill in Qty, Cost, Price for each.');
+    await loadStock();renderStock();
+    return result;
+}
+window.syncSkusManual=async function(){
+    if(!ordersData||ordersData.length===0){alert('No orders found. Upload orders first.');return;}
+    setStatus('Syncing SKUs...','syncing');
+    var r=await syncSkusToStock(false);
+    if(r.newCount===0){setStatus('All SKUs already in stock');alert('All '+r.total+' SKUs already exist in stock!');}
+    else{setStatus('Added '+r.added+' new SKUs');if(r.added>0)alert('Added '+r.added+' new SKUs to stock!');}
+    renderDashboard();
 };
 window.exportData=function(){
     var csv='Type,Name,SKU,Size,Qty,State,Status,Amount,Received\n';
