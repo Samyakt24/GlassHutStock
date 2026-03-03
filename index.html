@@ -1027,7 +1027,7 @@ window.handleFileUpload=async function(input){
                 // Progress update every 50 rows
                 if((r-dataStartRow)%50===0&&r>dataStartRow){
                     statusDiv.innerHTML='<div class="alert alert-info">Processing... '+Math.round((r-dataStartRow)/totalDataRows*100)+'% ('+imp+' new, '+upd+' updated)</div>';
-                }}
+                }
             }
             await loadOrders();
             statusDiv.innerHTML='<div class="alert alert-success">✅ Import done!<br><b>'+imp+'</b> new | <b>'+upd+'</b> updated | <b>'+skip+'</b> skipped'+(errors>0?' | <b>'+errors+'</b> errors':'')+(emptyRows>0?' | <b>'+emptyRows+'</b> empty rows':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Total in file: '+totalDataRows+' rows | Processed: '+(imp+upd+skip+errors)+' orders</span></div>';
