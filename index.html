@@ -325,8 +325,8 @@
                 <div class="card">
                     <div class="card-header"><span>📦 Stock (<span id="stockCnt">0</span>)</span></div>
                     <div style="overflow-x:auto"><table>
-                        <thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Cost</th><th>Price</th><th>Value</th><th>Act</th></tr></thead>
-                        <tbody id="stockTbl"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+                        <thead><tr><th>Product</th><th>Size</th><th>Qty</th><th>Cost</th><th>Price</th><th>Value</th><th>Sold</th><th>Received</th><th>Act</th></tr></thead>
+                        <tbody id="stockTbl"><tr><td colspan="9" class="loading">Loading...</td></tr></tbody>
                     </table></div>
                 </div>
             </div>
@@ -792,6 +792,8 @@ window.delStock=async function(id){if(!confirm('Delete?'))return;try{await db.fr
 window.editStock=function(id){var item=stockData.find(function(x){return x.id===id;});if(!item)return;document.getElementById('edit-id').value=id;document.getElementById('edit-name').value=item.name;document.getElementById('edit-size').value=item.size;document.getElementById('edit-qty').value=item.qty;document.getElementById('edit-cost').value=item.cost;document.getElementById('edit-price').value=item.price;document.getElementById('editModal').classList.add('show');};
 window.saveEdit=async function(){var id=parseInt(document.getElementById('edit-id').value);try{await db.from('stock').update({name:document.getElementById('edit-name').value,size:document.getElementById('edit-size').value,qty:parseInt(document.getElementById('edit-qty').value),cost:parseFloat(document.getElementById('edit-cost').value),price:parseFloat(document.getElementById('edit-price').value)}).eq('id',id);closeModal();await loadStock();setStatus('✅ Updated');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.updateQty=async function(id,val){try{await db.from('stock').update({qty:parseInt(val)||0}).eq('id',id);await loadStock();}catch(err){setStatus('❌ '+err.message,'error');}};
+window.updateCost=async function(id,val){try{await db.from('stock').update({cost:parseFloat(val)||0}).eq('id',id);await loadStock();}catch(err){setStatus('❌ '+err.message,'error');}};
+window.updatePrice=async function(id,val){try{await db.from('stock').update({price:parseFloat(val)||0}).eq('id',id);await loadStock();}catch(err){setStatus('❌ '+err.message,'error');}};
 
 // ORDERS CRUD
 document.getElementById('addOrderBtn').addEventListener('click',async function(){
@@ -1392,7 +1394,21 @@ function renderDashboard(){
 }
 function renderStock(){
     document.getElementById('stockCnt').textContent=stockData.length;
-    document.getElementById('stockTbl').innerHTML=stockData.length>0?stockData.map(function(x){var isLow=x.qty<=20;return'<tr class="'+(isLow?'low-stock':'')+'"><td><b>'+x.name+'</b></td><td>'+x.size+'"</td><td><input type="number" class="qty-input" value="'+x.qty+'" onchange="updateQty('+x.id+',this.value)" min="0" style="'+(isLow?'color:#dc2626;font-weight:600':'')+'"></td><td>₹'+x.cost+'</td><td style="color:#059669">₹'+x.price+'</td><td style="font-weight:600">₹'+(x.qty*x.cost).toLocaleString()+'</td><td><button class="act-btn edit" onclick="editStock('+x.id+')">✏️</button><button class="act-btn del" onclick="delStock('+x.id+')">🗑️</button></td></tr>';}).join(''):'<tr><td colspan="7" class="empty">No stock</td></tr>';
+    // Build SKU sales map from orders
+    var skuSales={};
+    ordersData.forEach(function(o){
+        var sku=(o.remark||'').trim().toLowerCase();
+        if(!sku)return;
+        if(!skuSales[sku])skuSales[sku]={sold:0,received:0};
+        skuSales[sku].sold+=(o.qty||1);
+        skuSales[sku].received+=(o.received||0);
+    });
+    document.getElementById('stockTbl').innerHTML=stockData.length>0?stockData.map(function(x){
+        var isLow=x.qty<=20;
+        var key=x.name.trim().toLowerCase();
+        var sales=skuSales[key]||{sold:0,received:0};
+        return'<tr class="'+(isLow?'low-stock':'')+'"><td><b>'+x.name+'</b></td><td>'+x.size+'"</td><td><input type="number" class="qty-input" value="'+x.qty+'" onchange="updateQty('+x.id+',this.value)" min="0" style="'+(isLow?'color:#dc2626;font-weight:600':'')+'"></td><td><input type="number" class="qty-input" value="'+x.cost+'" onchange="updateCost('+x.id+',this.value)" min="0" step="0.01" style="width:60px"></td><td><input type="number" class="qty-input" value="'+x.price+'" onchange="updatePrice('+x.id+',this.value)" min="0" step="0.01" style="width:60px;color:#059669"></td><td style="font-weight:600">₹'+(x.qty*x.cost).toLocaleString()+'</td><td style="text-align:center;font-weight:600;color:#d97706">'+(sales.sold||'-')+'</td><td style="color:'+(sales.received>=0?'#059669':'#dc2626')+'">₹'+Math.round(sales.received).toLocaleString()+'</td><td><button class="act-btn edit" onclick="editStock('+x.id+')">✏️</button><button class="act-btn del" onclick="delStock('+x.id+')">🗑️</button></td></tr>';
+    }).join(''):'<tr><td colspan="9" class="empty">No stock</td></tr>';
 }
 function renderOrders(){
     var filtered=ordersData;
