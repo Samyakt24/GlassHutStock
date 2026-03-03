@@ -1132,17 +1132,6 @@ window.handleFileUpload=async function(input){
                 statusDiv.innerHTML=resultHtml;
             }
             setStatus('Done');input.value='';
-            // POPUP result
-            var alertMsg='IMPORT RESULT\n\n';
-            alertMsg+='Rows read from file: '+rows.length+'\n';
-            alertMsg+='Fee/adjustment rows merged: '+mergedCount+'\n';
-            alertMsg+='Unique orders: '+allOrders.length+'\n';
-            alertMsg+='New inserted: '+imp+'\n';
-            alertMsg+='Updated: '+updCount+'\n';
-            alertMsg+='Errors: '+errors+'\n';
-            alertMsg+='DB total now: '+afterCount+' orders\n';
-            if(errorMsgs.length>0)alertMsg+='\nERRORS:\n'+errorMsgs.slice(0,5).join('\n');
-            alert(alertMsg);
         }catch(err){
             console.error('Import error:',err);
             statusDiv.innerHTML='<div class="alert alert-danger">❌ Error: '+err.message+'</div>';setStatus('❌ Failed','error');input.value='';
