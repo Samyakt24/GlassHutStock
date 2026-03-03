@@ -1352,7 +1352,7 @@ function renderDashboard(){
     var ret=ordersData.filter(function(x){return x.status==='Return';}).length;
     var exc=ordersData.filter(function(x){return x.status==='Exchange';}).length;
     var pend=ordersData.filter(function(x){return x.status==='Shipped'||x.status==='Pending';}).length;
-    var low=stockData.filter(function(x){return x.qty<=20;});
+    var low=stockData.filter(function(x){return x.qty>0&&x.qty<=20;});
     document.getElementById('d-orders').textContent=ordersData.length;
     document.getElementById('d-recv').textContent='₹'+Math.round(recv).toLocaleString();
     document.getElementById('d-losses').textContent='₹'+Math.round(Math.abs(losses)).toLocaleString();
@@ -1404,7 +1404,7 @@ function renderStock(){
         skuSales[sku].received+=(o.received||0);
     });
     document.getElementById('stockTbl').innerHTML=stockData.length>0?stockData.map(function(x){
-        var isLow=x.qty<=20;
+        var isLow=x.qty>0&&x.qty<=20;
         var key=x.name.trim().toLowerCase();
         var sales=skuSales[key]||{sold:0,received:0};
         return'<tr class="'+(isLow?'low-stock':'')+'"><td><b>'+x.name+'</b></td><td>'+x.size+'"</td><td><input type="number" class="qty-input" value="'+x.qty+'" onchange="updateQty('+x.id+',this.value)" min="0" style="'+(isLow?'color:#dc2626;font-weight:600':'')+'"></td><td><input type="number" class="qty-input" value="'+x.cost+'" onchange="updateCost('+x.id+',this.value)" min="0" step="0.01" style="width:60px"></td><td><input type="number" class="qty-input" value="'+x.price+'" onchange="updatePrice('+x.id+',this.value)" min="0" step="0.01" style="width:60px;color:#059669"></td><td style="font-weight:600">₹'+(x.qty*x.cost).toLocaleString()+'</td><td style="text-align:center;font-weight:600;color:#d97706">'+(sales.sold||'-')+'</td><td style="color:'+(sales.received>=0?'#059669':'#dc2626')+'">₹'+Math.round(sales.received).toLocaleString()+'</td><td><button class="act-btn edit" onclick="editStock('+x.id+')">✏️</button><button class="act-btn del" onclick="delStock('+x.id+')">🗑️</button></td></tr>';
