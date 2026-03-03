@@ -320,7 +320,7 @@
                         <div class="form-grp"><label>Cost ₹ *</label><input type="number" id="s-cost" min="0" step="0.01" placeholder="50"></div>
                         <div class="form-grp"><label>Price ₹ *</label><input type="number" id="s-price" min="0" step="0.01" placeholder="100"></div>
                     </div>
-                    <div style="text-align:right;margin-top:0.5rem"><button class="btn btn-primary" id="addStockBtn">➕ Add</button></div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem"><button class="btn btn-sm" onclick="importSkusFromOrders()" style="font-size:0.65rem;background:#f59e0b;color:white">📥 Import SKUs from Orders</button><button class="btn btn-primary" id="addStockBtn">➕ Add</button></div>
                 </div>
                 <div class="card">
                     <div class="card-header"><span>📦 Stock (<span id="stockCnt">0</span>)</span></div>
@@ -1158,7 +1158,51 @@ window.deleteAllOrders=async function(){
     }
 };
 
-// EXPORT
+window.importSkusFromOrders=async function(){
+    if(!ordersData||ordersData.length===0){alert('No orders found. Upload orders first.');return;}
+    // Get unique SKUs from orders
+    var orderSkus={};
+    ordersData.forEach(function(o){
+        var sku=(o.remark||'').trim();
+        if(sku&&sku.length>1&&!orderSkus[sku]){
+            orderSkus[sku]={name:sku,count:0};
+        }
+        if(sku&&orderSkus[sku])orderSkus[sku].count++;
+    });
+    var skuList=Object.values(orderSkus);
+    if(skuList.length===0){alert('No SKUs found in orders.');return;}
+    // Check which already exist in stock
+    var existingNames={};
+    stockData.forEach(function(s){existingNames[s.name.toLowerCase().trim()]=true;});
+    var newSkus=skuList.filter(function(s){return !existingNames[s.name.toLowerCase().trim()];});
+    if(newSkus.length===0){alert('All '+skuList.length+' SKUs already exist in stock!');return;}
+    if(!confirm('Found '+skuList.length+' unique SKUs in orders.\n'+newSkus.length+' are new (not in stock yet).\n\nAdd '+newSkus.length+' new SKUs to stock panel?\n(Qty, Cost, Price will be 0 — you can fill later)'))return;
+    setStatus('Adding '+newSkus.length+' SKUs...','syncing');
+    var added=0,errs=0;
+    // Batch insert in groups of 10
+    for(var b=0;b<newSkus.length;b+=10){
+        var batch=newSkus.slice(b,b+10).map(function(s){
+            return{name:s.name,size:'2.4',qty:0,cost:0,price:0};
+        });
+        try{
+            var res=await db.from('stock').insert(batch);
+            if(!res.error)added+=batch.length;
+            else{
+                // Try one by one
+                for(var i=0;i<batch.length;i++){
+                    try{
+                        var r2=await db.from('stock').insert(batch[i]);
+                        if(!r2.error)added++;else errs++;
+                    }catch(e){errs++;}
+                }
+            }
+        }catch(e){errs+=batch.length;}
+        await new Promise(function(ok){setTimeout(ok,200);});
+    }
+    await loadStock();renderStock();renderDashboard();
+    setStatus('Added '+added+' SKUs to stock'+(errs>0?', '+errs+' errors':''));
+    alert('Done! Added '+added+' new SKUs to stock.\n'+(errs>0?errs+' errors.\n':'')+'Now go to Stock tab and fill in Qty, Cost, Price for each.');
+};
 window.exportData=function(){
     var csv='Type,Name,SKU,Size,Qty,State,Status,Amount,Received\n';
     stockData.forEach(function(s){csv+='Stock,"'+s.name+'",,'+s.size+','+s.qty+',,,'+s.cost+','+s.price+'\n';});
