@@ -102,6 +102,9 @@
         .badge-delivered { background: #d1fae5; color: #065f46; }
         .badge-rto { background: #fee2e2; color: #991b1b; }
         .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-return { background: #fef3c7; color: #b45309; }
+        .badge-exchange { background: #ede9fe; color: #6d28d9; }
+        .badge-shipped { background: #e0f2fe; color: #075985; }
         .badge-new { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
         .badge-dup { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
         
@@ -289,11 +292,14 @@
             <!-- DASHBOARD -->
             <div class="tab-content active" id="tab-dashboard">
                 <div class="summary">
-                    <div class="sum-card"><div class="label">Stock Value</div><div class="value" id="d-stock">₹0</div></div>
-                    <div class="sum-card"><div class="label">Total Sales</div><div class="value" id="d-sales">₹0</div></div>
-                    <div class="sum-card green"><div class="label">Received</div><div class="value" id="d-recv">₹0</div></div>
+                    <div class="sum-card"><div class="label">Total Orders</div><div class="value" id="d-orders">0</div></div>
+                    <div class="sum-card green"><div class="label">Total Received</div><div class="value" id="d-recv">₹0</div></div>
+                    <div class="sum-card red"><div class="label">Return Losses</div><div class="value" id="d-losses">₹0</div></div>
                     <div class="sum-card blue"><div class="label">Delivered</div><div class="value" id="d-del">0</div></div>
                     <div class="sum-card red"><div class="label">RTO</div><div class="value" id="d-rto">0</div></div>
+                    <div class="sum-card" style="border-left:4px solid #f59e0b"><div class="label">Return</div><div class="value" style="color:#f59e0b" id="d-return">0</div></div>
+                    <div class="sum-card" style="border-left:4px solid #8b5cf6"><div class="label">Exchange</div><div class="value" style="color:#8b5cf6" id="d-exchange">0</div></div>
+                    <div class="sum-card" style="border-left:4px solid #6b7280"><div class="label">Pending</div><div class="value" style="color:#6b7280" id="d-pending">0</div></div>
                 </div>
                 <div id="alertBox"></div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
@@ -362,7 +368,10 @@
                             </div>
                         </div>
                     </div>
-                    <div style="text-align:right;margin-top:0.5rem"><button class="btn btn-primary" id="addOrderBtn">➕ Add</button></div>
+                    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.5rem">
+                        <button class="btn btn-primary" id="addOrderBtn">➕ Add</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteAllOrders()" style="font-size:0.6rem">🗑️ Delete All Orders</button>
+                    </div>
                 </div>
                 <div class="filters">
                     <span style="font-size:0.65rem;color:#6b7280">Platform:</span>
@@ -372,8 +381,10 @@
                     <button class="filter-btn" data-f="flipkart">Flipkart</button>
                     <span style="margin-left:0.5rem;font-size:0.65rem;color:#6b7280">Status:</span>
                     <button class="filter-btn" data-s="Delivered">✅</button>
-                    <button class="filter-btn" data-s="RTO">🔄</button>
-                    <button class="filter-btn" data-s="Pending">⏳</button>
+                    <button class="filter-btn" data-s="RTO">📦</button>
+                    <button class="filter-btn" data-s="Return">↩️</button>
+                    <button class="filter-btn" data-s="Exchange">🔄</button>
+                    <button class="filter-btn" data-s="Shipped">🚚</button>
                 </div>
                 <div class="card">
                     <div class="card-header"><span>🛒 Orders (<span id="ordCnt">0</span>)</span></div>
@@ -825,10 +836,20 @@ window.handleFileUpload=async function(input){
                 }
             } else {
                 var data=new Uint8Array(e.target.result);
-                var wb=XLSX.read(data,{type:'array',cellDates:false});
+                var wb=XLSX.read(data,{type:'array',cellDates:false,dense:false});
                 // Find the right sheet: prefer "Order Payments" or any sheet with "Order"
                 var sn=wb.SheetNames.find(function(n){return n==='Order Payments';})||wb.SheetNames.find(function(n){return n.includes('Order');})||wb.SheetNames[1]||wb.SheetNames[0];
-                rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
+                var sheet=wb.Sheets[sn];
+                var sheetRef=sheet['!ref']||'A1';
+                console.log('Sheet: '+sn+', Ref: '+sheetRef);
+                // Force full range read with blankrows
+                rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',range:sheetRef,blankrows:true});
+                console.log('SheetJS read '+rows.length+' rows from sheet "'+sn+'"');
+                // If rows seem too few, try reading without range limit
+                if(rows.length<100){
+                    rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',blankrows:true});
+                    console.log('Retry without range: '+rows.length+' rows');
+                }
             }
 
             // ===== FIND HEADER ROW =====
@@ -923,154 +944,229 @@ window.handleFileUpload=async function(input){
                 }
             }
 
-            // ===== IMPORT DATA (BATCH MODE) =====
-            var imp=0,skip=0,upd=0,errors=0,emptyRows=0;
-            var totalDataRows=rows.length-dataStartRow;
-            console.log('Starting import: '+totalDataRows+' data rows from row '+dataStartRow);
-            console.log('Column mapping:', JSON.stringify(cm));
+            // ===== IMPORT DATA =====
+            var imp=0,errors=0,emptyRows=0;
+            var errorMsgs=[];
 
-            // Step 1: Parse ALL rows first (no API calls)
-            var parsedNew=[];
-            var parsedUpdate=[];
-            var existingMap={};
-            ordersData.forEach(function(o){existingMap[o.order_id]=o;});
-
+            // Step 1: Parse ALL rows (no API calls)
+            var allOrders=[];
             for(var r=dataStartRow;r<rows.length;r++){
                 var row=rows[r];
                 if(!row){emptyRows++;continue;}
-
                 var oid=(row[cm.orderId]||'').toString().trim();
                 if(!oid||oid.length<3){emptyRows++;continue;}
 
-                // ===== STATUS MAPPING =====
                 var rawStatus=(row[cm.status]!==undefined?row[cm.status]:'').toString().trim();
                 var status='Pending';
                 var sl=rawStatus.toLowerCase();
                 if(sl==='delivered'||sl.includes('deliver'))status='Delivered';
-                else if(sl==='rto'||sl==='return'||sl==='exchange'||sl.includes('rto')||sl.includes('return'))status='RTO';
-                else if(sl==='shipped'||sl==='dispatched'||sl.includes('ship'))status='Pending';
+                else if(sl==='rto')status='RTO';
+                else if(sl==='return'||sl==='returned')status='Return';
+                else if(sl==='exchange'||sl==='exchanged')status='Exchange';
+                else if(sl==='shipped'||sl==='dispatched'||sl.includes('ship'))status='Shipped';
+                else if(sl.includes('rto'))status='RTO';
+                else if(sl.includes('return'))status='Return';
+                else if(sl.includes('exchange'))status='Exchange';
 
-                // Date parsing - handles string, number, Date object
                 var od='';
                 if(cm.date!==undefined&&row[cm.date]!=null&&row[cm.date]!==''){
                     var d=row[cm.date];
                     try{
-                        if(d instanceof Date){
-                            od=d.toISOString().split('T')[0];
-                        }else if(typeof d==='number'){
-                            od=new Date((d-25569)*86400*1000).toISOString().split('T')[0];
-                        }else{
+                        if(d instanceof Date){od=d.toISOString().split('T')[0];}
+                        else if(typeof d==='number'){od=new Date((d-25569)*86400*1000).toISOString().split('T')[0];}
+                        else{
                             var ds=d.toString().trim();
                             if(ds.includes(' '))ds=ds.split(' ')[0];
                             if(ds.includes('T'))ds=ds.split('T')[0];
-                            if(/^\d{2}[.\/]\d{2}[.\/]\d{4}$/.test(ds)){
-                                var parts=ds.split(/[.\/]/);
-                                od=parts[2]+'-'+parts[1]+'-'+parts[0];
-                            }else if(/^\d{4}-\d{2}-\d{2}/.test(ds)){
-                                od=ds.substring(0,10);
-                            }else{
-                                var m2=ds.match(/(\d{4})-(\d{2})-(\d{2})/);
-                                if(m2)od=m2[1]+'-'+m2[2]+'-'+m2[3];
-                                else od=ds;
-                            }
+                            if(/^\d{2}[.\/]\d{2}[.\/]\d{4}$/.test(ds)){var pts=ds.split(/[.\/]/);od=pts[2]+'-'+pts[1]+'-'+pts[0];}
+                            else if(/^\d{4}-\d{2}-\d{2}/.test(ds)){od=ds.substring(0,10);}
+                            else{var m2=ds.match(/(\d{4})-(\d{2})-(\d{2})/);if(m2)od=m2[1]+'-'+m2[2]+'-'+m2[3];else od=ds;}
                         }
-                    }catch(dateErr){console.warn('Date parse err row '+r+':',dateErr,d);}
+                    }catch(dateErr){}
                 }
 
-                var sku=(cm.sku!==undefined&&row[cm.sku])?row[cm.sku].toString().trim():'';
-                var size=(cm.size!==undefined&&row[cm.size])?row[cm.size].toString().trim():'';
-                var state=(cm.state!==undefined&&row[cm.state])?row[cm.state].toString().trim():'';
-                var productName=(cm.product!==undefined&&row[cm.product])?row[cm.product].toString().substring(0,200):'';
-                var amount=cm.amount!==undefined?parseFloat(row[cm.amount])||0:0;
-                var received=cm.received!==undefined?parseFloat(row[cm.received])||0:0;
-                var qty=cm.qty!==undefined?parseInt(row[cm.qty])||1:1;
-
-                // Log first 5 rows
-                if(parsedNew.length+parsedUpdate.length<5)console.log('Row '+r+': id='+oid+', date='+od+', status='+status+', amt='+amount+', recv='+received);
-
-                var existing=existingMap[oid];
-                if(existing){
-                    parsedUpdate.push({id:existing.id,data:{status:status,amount:amount,received:received,qty:qty,order_date:od||existing.order_date,items:productName||existing.items,platform:'meesho',size:size||existing.size,state:state||existing.state,remark:sku||existing.remark}});
-                } else {
-                    parsedNew.push({order_id:oid,items:productName,size:size,qty:qty,state:state,amount:amount,received:received,status:status,platform:'meesho',remark:sku,order_date:od||new Date().toISOString().split('T')[0]});
-                }
+                allOrders.push({
+                    order_id:oid,
+                    items:(cm.product!==undefined&&row[cm.product])?row[cm.product].toString().substring(0,200):'',
+                    size:(cm.size!==undefined&&row[cm.size])?row[cm.size].toString().trim():'',
+                    qty:cm.qty!==undefined?parseInt(row[cm.qty])||1:1,
+                    state:(cm.state!==undefined&&row[cm.state])?row[cm.state].toString().trim():'',
+                    amount:cm.amount!==undefined?parseFloat(row[cm.amount])||0:0,
+                    received:cm.received!==undefined?parseFloat(row[cm.received])||0:0,
+                    status:status,platform:'meesho',
+                    remark:(cm.sku!==undefined&&row[cm.sku])?row[cm.sku].toString().trim():'',
+                    order_date:od||new Date().toISOString().split('T')[0]
+                });
             }
 
-            console.log('Parsed: '+parsedNew.length+' new, '+parsedUpdate.length+' updates, '+emptyRows+' empty');
-            statusDiv.innerHTML='<div class="alert alert-info">Parsed '+totalDataRows+' rows. Saving '+parsedNew.length+' new + '+parsedUpdate.length+' updates...</div>';
+            // MERGE duplicate order IDs: sum received amounts, keep status from row that has one
+            var orderMap={};
+            allOrders.forEach(function(o){
+                if(!orderMap[o.order_id]){
+                    orderMap[o.order_id]=Object.assign({},o);
+                    orderMap[o.order_id]._receivedParts=[o.received];
+                } else {
+                    var existing=orderMap[o.order_id];
+                    existing._receivedParts.push(o.received);
+                    // Take status from whichever row has a real status
+                    if(o.status!=='Pending'&&(existing.status==='Pending'||!existing.status)){
+                        existing.status=o.status;
+                    }
+                    // Take product name from whichever has it
+                    if(o.items&&!existing.items)existing.items=o.items;
+                    if(o.remark&&!existing.remark)existing.remark=o.remark;
+                    if(o.size&&!existing.size)existing.size=o.size;
+                    if(o.state&&!existing.state)existing.state=o.state;
+                    // Sum amounts
+                    existing.amount=existing.amount||o.amount;
+                }
+            });
+            // Build final list with summed received
+            var mergedOrders=[];
+            Object.keys(orderMap).forEach(function(oid){
+                var o=orderMap[oid];
+                // Sum all received parts for accurate money tracking
+                o.received=o._receivedParts.reduce(function(a,b){return a+b;},0);
+                o.received=Math.round(o.received*100)/100;
+                delete o._receivedParts;
+                mergedOrders.push(o);
+            });
+            var mergedCount=allOrders.length-mergedOrders.length;
+            allOrders=mergedOrders;
+            console.log('After merge: '+allOrders.length+' unique orders ('+mergedCount+' rows merged for affiliate fees/claims)');
 
-            // Step 2: Batch INSERT new orders (50 at a time)
-            var BATCH=50;
-            for(var b=0;b<parsedNew.length;b+=BATCH){
-                var batch=parsedNew.slice(b,b+BATCH);
+            // Remove duplicates already in DB
+            var existingIds={};
+            ordersData.forEach(function(o){existingIds[o.order_id]=true;});
+            var newOrders=allOrders.filter(function(o){return !existingIds[o.order_id];});
+            var dupCount=allOrders.length-newOrders.length;
+
+            statusDiv.innerHTML='<div class="alert alert-info">Parsed <b>'+allOrders.length+'</b> unique orders ('+mergedCount+' fee/adjustment rows merged). Uploading...</div>';
+            console.log('Parsed:',allOrders.length,'New:',newOrders.length,'Dup:',dupCount);
+
+            // Step 2: Insert in small batches of 10 with 500ms delay
+            var BATCH=10;
+            for(var b=0;b<newOrders.length;b+=BATCH){
+                var batch=newOrders.slice(b,b+BATCH);
+                var batchOk=false;
+
+                // Try batch insert first
                 try{
                     var res=await db.from('orders').insert(batch);
-                    if(res.error){
-                        console.error('Batch insert error at '+b+':',res.error.message);
-                        // Fallback: try one-by-one for this batch
-                        for(var bi=0;bi<batch.length;bi++){
-                            try{
-                                var r2=await db.from('orders').insert(batch[bi]);
-                                if(r2.error){skip++;console.error('Single insert err:',batch[bi].order_id,r2.error.message);}
-                                else imp++;
-                            }catch(e2){skip++;console.error('Single insert exception:',batch[bi].order_id,e2.message);}
-                        }
-                    } else {
-                        imp+=batch.length;
+                    if(!res.error){imp+=batch.length;batchOk=true;}
+                    else{console.warn('Batch err at '+b+':',res.error.message);}
+                }catch(e){console.warn('Batch exception at '+b+':',e.message);}
+
+                // If batch failed, try one-by-one
+                if(!batchOk){
+                    for(var bi=0;bi<batch.length;bi++){
+                        try{
+                            var r2=await db.from('orders').insert(batch[bi]);
+                            if(!r2.error){imp++;}
+                            else{errors++;if(errorMsgs.length<20)errorMsgs.push(batch[bi].order_id+': '+r2.error.message);}
+                        }catch(e2){errors++;if(errorMsgs.length<20)errorMsgs.push(batch[bi].order_id+': '+e2.message);}
+                        // Delay between individual inserts too
+                        await new Promise(function(ok){setTimeout(ok,100);});
                     }
-                }catch(err){
-                    errors+=batch.length;
-                    console.error('Batch insert exception at '+b+':',err.message);
                 }
-                // Progress
-                var pctNew=Math.round((Math.min(b+BATCH,parsedNew.length))/Math.max(parsedNew.length,1)*50);
-                statusDiv.innerHTML='<div class="alert alert-info">Inserting new orders... '+pctNew+'% ('+imp+'/'+parsedNew.length+')</div>';
-                // Small delay to avoid rate limits
-                await new Promise(function(resolve){setTimeout(resolve,100);});
+
+                // Progress update
+                var done=Math.min(b+BATCH,newOrders.length);
+                var pct=Math.round(done/newOrders.length*100);
+                statusDiv.innerHTML='<div class="alert alert-info" style="font-size:0.85rem">Uploading... <b>'+pct+'%</b> ('+imp+'/'+newOrders.length+' inserted)'+(errors>0?' <span style="color:red">'+errors+' errors</span>':'')+'</div>';
+
+                // 500ms delay between batches to avoid rate limiting
+                await new Promise(function(ok){setTimeout(ok,500);});
             }
 
-            // Step 3: Batch UPDATE existing orders (one-by-one but with delay)
-            for(var u=0;u<parsedUpdate.length;u++){
-                try{
-                    var res=await db.from('orders').update(parsedUpdate[u].data).eq('id',parsedUpdate[u].id);
-                    if(res.error){errors++;console.error('Update err id='+parsedUpdate[u].id+':',res.error.message);}
-                    else upd++;
-                }catch(err){errors++;console.error('Update exception:',err.message);}
-                // Progress + delay every 50
-                if(u%BATCH===0&&u>0){
-                    statusDiv.innerHTML='<div class="alert alert-info">Updating orders... '+(50+Math.round(u/Math.max(parsedUpdate.length,1)*50))+'% ('+upd+'/'+parsedUpdate.length+')</div>';
-                    await new Promise(function(resolve){setTimeout(resolve,100);});
+            // Step 3: Update existing orders (batch by batch)
+            var updCount=0;
+            if(dupCount>0){
+                statusDiv.innerHTML='<div class="alert alert-info">Updating '+dupCount+' existing orders...</div>';
+                var existList=[];
+                allOrders.forEach(function(o){
+                    var ex=ordersData.find(function(e){return e.order_id===o.order_id;});
+                    if(ex)existList.push({id:ex.id,data:o});
+                });
+                for(var u=0;u<existList.length;u++){
+                    try{
+                        var res=await db.from('orders').update(existList[u].data).eq('id',existList[u].id);
+                        if(!res.error)updCount++;
+                    }catch(e){}
+                    if(u%10===9)await new Promise(function(ok){setTimeout(ok,300);});
                 }
             }
 
+            // Step 4: Reload and verify
             await loadOrders();
-            statusDiv.innerHTML='<div class="alert alert-success">✅ Import done!<br><b>'+imp+'</b> new | <b>'+upd+'</b> updated | <b>'+skip+'</b> skipped'+(errors>0?' | <b>'+errors+'</b> errors':'')+(emptyRows>0?' | <b>'+emptyRows+'</b> empty rows':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Total in file: '+totalDataRows+' rows | Processed: '+(imp+upd+skip+errors)+' orders</span></div>';
+            var afterCount=ordersData.length;
+            var resultHtml='<div class="alert alert-success">Import done!<br><b>'+imp+'</b> new inserted | <b>'+updCount+'</b> updated | <b>'+mergedCount+'</b> fee rows merged'+(errors>0?' | <b style="color:red">'+errors+' errors</b>':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Rows read: '+rows.length+' | Unique orders: '+allOrders.length+' | DB now: '+afterCount+' total</span></div>';
+            if(errorMsgs.length>0){
+                resultHtml+='<div class="alert alert-danger" style="margin-top:0.3rem;font-size:0.65rem;max-height:100px;overflow-y:auto"><b>Errors:</b><br>'+errorMsgs.join('<br>')+'</div>';
+            }
             // Build month-wise summary
             var monthSum={};
             ordersData.forEach(function(o){
                 var d=o.order_date||'';
                 var mk=(d&&d.length>=7)?d.substring(0,7):'Unknown';
-                if(!monthSum[mk])monthSum[mk]={count:0,del:0,rto:0,pend:0};
+                if(!monthSum[mk])monthSum[mk]={count:0,del:0,rto:0,ret:0,exc:0,ship:0};
                 monthSum[mk].count++;
                 if(o.status==='Delivered')monthSum[mk].del++;
                 else if(o.status==='RTO')monthSum[mk].rto++;
-                else monthSum[mk].pend++;
+                else if(o.status==='Return')monthSum[mk].ret++;
+                else if(o.status==='Exchange')monthSum[mk].exc++;
+                else monthSum[mk].ship++;
             });
             var mKeys=Object.keys(monthSum).sort().reverse();
             if(mKeys.length>0){
                 var mSumHtml=mKeys.map(function(k){
                     var ms=monthSum[k];
-                    return '<span style="background:#fef3c7;padding:0.2rem 0.5rem;border-radius:6px;font-size:0.65rem;display:inline-block;margin:0.15rem">'+k+': <b>'+ms.count+'</b> (D:'+ms.del+' R:'+ms.rto+' P:'+ms.pend+')</span>';
+                    var parts='D:'+ms.del+' RTO:'+ms.rto;
+                    if(ms.ret>0)parts+=' Ret:'+ms.ret;
+                    if(ms.exc>0)parts+=' Exc:'+ms.exc;
+                    if(ms.ship>0)parts+=' Ship:'+ms.ship;
+                    return '<span style="background:#fef3c7;padding:0.2rem 0.5rem;border-radius:6px;font-size:0.65rem;display:inline-block;margin:0.15rem">'+k+': <b>'+ms.count+'</b> ('+parts+')</span>';
                 }).join(' ');
-                statusDiv.innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.7rem">Monthly breakdown: '+mSumHtml+'</div>';
+                statusDiv.innerHTML=resultHtml+'<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.7rem">Monthly breakdown: '+mSumHtml+'</div>';
+            } else {
+                statusDiv.innerHTML=resultHtml;
             }
-            setStatus('✅ Import done!');input.value='';
+            setStatus('Done');input.value='';
+            // POPUP result
+            var alertMsg='IMPORT RESULT\n\n';
+            alertMsg+='Rows read from file: '+rows.length+'\n';
+            alertMsg+='Fee/adjustment rows merged: '+mergedCount+'\n';
+            alertMsg+='Unique orders: '+allOrders.length+'\n';
+            alertMsg+='New inserted: '+imp+'\n';
+            alertMsg+='Updated: '+updCount+'\n';
+            alertMsg+='Errors: '+errors+'\n';
+            alertMsg+='DB total now: '+afterCount+' orders\n';
+            if(errorMsgs.length>0)alertMsg+='\nERRORS:\n'+errorMsgs.slice(0,5).join('\n');
+            alert(alertMsg);
         }catch(err){
             console.error('Import error:',err);
             statusDiv.innerHTML='<div class="alert alert-danger">❌ Error: '+err.message+'</div>';setStatus('❌ Failed','error');input.value='';
         }
     };
     if(isCSV){reader.readAsText(file);}else{reader.readAsArrayBuffer(file);}
+};
+
+// DELETE ALL ORDERS
+window.deleteAllOrders=async function(){
+    if(!confirm('DELETE ALL ORDERS from database? This cannot be undone!'))return;
+    if(!confirm('Are you SURE? All order data will be permanently deleted.'))return;
+    setStatus('Deleting all orders...','syncing');
+    try{
+        var r=await db.from('orders').delete().neq('id',0);
+        if(r.error)throw new Error(r.error.message);
+        ordersData=[];
+        renderOrders();renderDashboard();renderMonthly();
+        setStatus('All orders deleted');
+        alert('All orders deleted! You can now upload your Excel file fresh.');
+    }catch(err){
+        setStatus('Delete failed: '+err.message,'error');
+        alert('Delete failed: '+err.message);
+    }
 };
 
 // EXPORT
@@ -1090,91 +1186,82 @@ function renderMonthly(){
     var container=document.getElementById('monthlyContent');
     if(!ordersData||ordersData.length===0){container.innerHTML='<div class="empty">No orders yet. Import orders first!</div>';return;}
 
-    // Group orders by YYYY-MM
     var months={};
-    var totals={orders:0,amount:0,received:0,delivered:0,rto:0,pending:0};
+    var totals={orders:0,received:0,delivered:0,rto:0,returned:0,exchange:0,shipped:0,losses:0,affFees:0,claims:0};
     ordersData.forEach(function(o){
         var date=o.order_date||'';
         var key='Unknown';
-        if(date){
-            // Handle various date formats
-            var parts=date.toString().split('-');
-            if(parts.length>=2)key=parts[0]+'-'+parts[1];
-        }
-        if(!months[key])months[key]={orders:[],amount:0,received:0,delivered:0,rto:0,pending:0,platforms:{}};
+        if(date){var parts=date.toString().split('-');if(parts.length>=2)key=parts[0]+'-'+parts[1];}
+        if(!months[key])months[key]={orders:[],received:0,delivered:0,rto:0,returned:0,exchange:0,shipped:0,losses:0,platforms:{}};
         var m=months[key];
         m.orders.push(o);
-        m.amount+=o.amount||0;
         m.received+=o.received||0;
         if(o.status==='Delivered')m.delivered++;
         else if(o.status==='RTO')m.rto++;
-        else m.pending++;
-        // Platform breakdown
+        else if(o.status==='Return')m.returned++;
+        else if(o.status==='Exchange')m.exchange++;
+        else m.shipped++;
+        if(o.received<0)m.losses+=o.received;
         var plat=o.platform||'other';
-        if(!m.platforms[plat])m.platforms[plat]={count:0,amount:0,received:0,delivered:0,rto:0};
+        if(!m.platforms[plat])m.platforms[plat]={count:0,received:0,delivered:0,rto:0,returned:0};
         var p=m.platforms[plat];
-        p.count++;p.amount+=o.amount||0;p.received+=o.received||0;
+        p.count++;p.received+=o.received||0;
         if(o.status==='Delivered')p.delivered++;
         else if(o.status==='RTO')p.rto++;
-        // Totals
-        totals.orders++;totals.amount+=o.amount||0;totals.received+=o.received||0;
+        else if(o.status==='Return'||o.status==='Exchange')p.returned++;
+        totals.orders++;totals.received+=o.received||0;
         if(o.status==='Delivered')totals.delivered++;
         else if(o.status==='RTO')totals.rto++;
-        else totals.pending++;
+        else if(o.status==='Return')totals.returned++;
+        else if(o.status==='Exchange')totals.exchange++;
+        else totals.shipped++;
+        if(o.received<0)totals.losses+=o.received;
     });
 
-    // Sort months descending (newest first)
     var sortedKeys=Object.keys(months).filter(function(k){return k!=='Unknown';}).sort().reverse();
     if(months['Unknown'])sortedKeys.push('Unknown');
 
     var html='';
-    // Year/All-time summary
     html+='<div class="year-summary">';
     html+='<div class="year-card"><div class="yc-label">Total Orders</div><div class="yc-val" style="color:#d97706">'+totals.orders+'</div></div>';
-    html+='<div class="year-card"><div class="yc-label">Total Sales</div><div class="yc-val" style="color:#d97706">₹'+totals.amount.toLocaleString()+'</div></div>';
-    html+='<div class="year-card"><div class="yc-label">Total Received</div><div class="yc-val" style="color:#059669">₹'+totals.received.toLocaleString()+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Total Received</div><div class="yc-val" style="color:#059669">₹'+Math.round(totals.received).toLocaleString()+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Return Losses</div><div class="yc-val" style="color:#dc2626">₹'+Math.round(Math.abs(totals.losses)).toLocaleString()+'</div></div>';
     html+='<div class="year-card"><div class="yc-label">Delivered</div><div class="yc-val" style="color:#2563eb">'+totals.delivered+'</div></div>';
-    html+='<div class="year-card"><div class="yc-label">RTO/Return</div><div class="yc-val" style="color:#dc2626">'+totals.rto+'</div></div>';
-    html+='<div class="year-card"><div class="yc-label">Pending</div><div class="yc-val" style="color:#f59e0b">'+totals.pending+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">RTO</div><div class="yc-val" style="color:#dc2626">'+totals.rto+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Return</div><div class="yc-val" style="color:#f59e0b">'+totals.returned+'</div></div>';
+    if(totals.exchange>0)html+='<div class="year-card"><div class="yc-label">Exchange</div><div class="yc-val" style="color:#8b5cf6">'+totals.exchange+'</div></div>';
     html+='</div>';
 
-    // Month cards
     sortedKeys.forEach(function(key){
         var m=months[key];
         var isOpen=openMonthKey===key;
         var totalOrders=m.orders.length;
-        // Format month label
         var monthLabel=key;
-        if(key!=='Unknown'){
-            var parts=key.split('-');
-            var yr=parts[0];
-            var mo=parseInt(parts[1])-1;
-            monthLabel=MONTH_NAMES[mo]+' '+yr;
-        }
+        if(key!=='Unknown'){var parts=key.split('-');var yr=parts[0];var mo=parseInt(parts[1])-1;monthLabel=MONTH_NAMES[mo]+' '+yr;}
 
         html+='<div class="month-card">';
         html+='<div class="month-card-head" onclick="toggleMonth(\''+key+'\')">';
         html+='<div class="month-title"><span class="arrow'+(isOpen?' open':'')+'">▶</span> 📅 '+monthLabel+'</div>';
         html+='<div class="month-pills">';
         html+='<span class="month-pill mp-total">'+totalOrders+' orders</span>';
-        html+='<span class="month-pill mp-sale">₹'+m.amount.toLocaleString()+'</span>';
-        html+='<span class="month-pill mp-recv">₹'+m.received.toLocaleString()+'</span>';
+        html+='<span class="month-pill mp-recv">₹'+Math.round(m.received).toLocaleString()+'</span>';
         html+='<span class="month-pill mp-del">✅ '+m.delivered+'</span>';
-        if(m.rto>0)html+='<span class="month-pill mp-rto">🔄 '+m.rto+'</span>';
+        if(m.rto>0)html+='<span class="month-pill mp-rto">📦 '+m.rto+'</span>';
+        if(m.returned>0)html+='<span class="month-pill" style="background:#fef3c7;color:#f59e0b">↩️ '+m.returned+'</span>';
+        if(m.exchange>0)html+='<span class="month-pill" style="background:#ede9fe;color:#8b5cf6">🔄 '+m.exchange+'</span>';
         html+='</div></div>';
 
         html+='<div class="month-card-body'+(isOpen?' open':'')+'">';
         if(isOpen){
-            // Stats grid
             html+='<div class="month-grid">';
             html+='<div class="month-stat"><div class="ms-label">Total Orders</div><div class="ms-val" style="color:#d97706">'+totalOrders+'</div></div>';
-            html+='<div class="month-stat"><div class="ms-label">Sales Amount</div><div class="ms-val" style="color:#d97706">₹'+m.amount.toLocaleString()+'</div></div>';
-            html+='<div class="month-stat"><div class="ms-label">Amount Received</div><div class="ms-val" style="color:#059669">₹'+m.received.toLocaleString()+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">Amount Received</div><div class="ms-val" style="color:#059669">₹'+Math.round(m.received).toLocaleString()+'</div></div>';
+            html+='<div class="month-stat" style="border-color:#fca5a5"><div class="ms-label">Return Losses</div><div class="ms-val" style="color:#dc2626">₹'+Math.round(Math.abs(m.losses)).toLocaleString()+'</div></div>';
             html+='<div class="month-stat"><div class="ms-label">Delivered</div><div class="ms-val" style="color:#2563eb">'+m.delivered+'</div></div>';
-            html+='<div class="month-stat"><div class="ms-label">RTO / Return</div><div class="ms-val" style="color:#dc2626">'+m.rto+'</div></div>';
-            html+='<div class="month-stat"><div class="ms-label">Pending / Shipped</div><div class="ms-val" style="color:#f59e0b">'+m.pending+'</div></div>';
-            var profit=m.received;
-            html+='<div class="month-stat" style="border-color:'+(profit>=0?'#6ee7b7':'#fca5a5')+'"><div class="ms-label">Net Received</div><div class="ms-val" style="color:'+(profit>=0?'#059669':'#dc2626')+'">₹'+profit.toLocaleString()+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">RTO</div><div class="ms-val" style="color:#dc2626">'+m.rto+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">Return</div><div class="ms-val" style="color:#f59e0b">'+m.returned+'</div></div>';
+            if(m.exchange>0)html+='<div class="month-stat"><div class="ms-label">Exchange</div><div class="ms-val" style="color:#8b5cf6">'+m.exchange+'</div></div>';
+            if(m.shipped>0)html+='<div class="month-stat"><div class="ms-label">Shipped</div><div class="ms-val" style="color:#6b7280">'+m.shipped+'</div></div>';
             var delRate=totalOrders>0?Math.round(m.delivered/totalOrders*100):0;
             html+='<div class="month-stat"><div class="ms-label">Delivery Rate</div><div class="ms-val" style="color:'+(delRate>=70?'#059669':'#dc2626')+'">'+delRate+'%</div></div>';
             html+='</div>';
@@ -1184,16 +1271,16 @@ function renderMonthly(){
             if(platKeys.length>0){
                 html+='<div style="margin-top:0.5rem"><h5 style="font-size:0.8rem;color:#92400e;margin-bottom:0.5rem">📊 Platform Breakdown</h5>';
                 html+='<div style="background:#fffbeb;border-radius:10px;overflow:hidden;border:1px solid #fde68a">';
-                html+='<div class="plat-row" style="background:#fef3c7;font-weight:600;font-size:0.7rem"><span class="plat-name">Platform</span><div class="plat-nums"><span style="min-width:50px;text-align:center">Orders</span><span style="min-width:80px;text-align:right">Sales</span><span style="min-width:80px;text-align:right">Received</span><span style="min-width:40px;text-align:center">✅</span><span style="min-width:40px;text-align:center">🔄</span></div></div>';
+                html+='<div class="plat-row" style="background:#fef3c7;font-weight:600;font-size:0.7rem"><span class="plat-name">Platform</span><div class="plat-nums"><span style="min-width:50px;text-align:center">Orders</span><span style="min-width:80px;text-align:right">Received</span><span style="min-width:40px;text-align:center">✅</span><span style="min-width:40px;text-align:center">📦</span><span style="min-width:40px;text-align:center">↩️</span></div></div>';
                 platKeys.forEach(function(pk){
                     var pd=m.platforms[pk];
                     var emoji=pk==='meesho'?'🛍️':pk==='amazon'?'📦':pk==='flipkart'?'🛒':'📱';
-                    html+='<div class="plat-row"><span class="plat-name">'+emoji+' '+pk.charAt(0).toUpperCase()+pk.slice(1)+'</span><div class="plat-nums"><span style="min-width:50px;text-align:center;font-weight:600">'+pd.count+'</span><span style="min-width:80px;text-align:right">₹'+pd.amount.toLocaleString()+'</span><span style="min-width:80px;text-align:right;color:#059669">₹'+pd.received.toLocaleString()+'</span><span style="min-width:40px;text-align:center;color:#2563eb">'+pd.delivered+'</span><span style="min-width:40px;text-align:center;color:#dc2626">'+pd.rto+'</span></div></div>';
+                    html+='<div class="plat-row"><span class="plat-name">'+emoji+' '+pk.charAt(0).toUpperCase()+pk.slice(1)+'</span><div class="plat-nums"><span style="min-width:50px;text-align:center;font-weight:600">'+pd.count+'</span><span style="min-width:80px;text-align:right;color:#059669">₹'+Math.round(pd.received).toLocaleString()+'</span><span style="min-width:40px;text-align:center;color:#2563eb">'+pd.delivered+'</span><span style="min-width:40px;text-align:center;color:#dc2626">'+pd.rto+'</span><span style="min-width:40px;text-align:center;color:#f59e0b">'+pd.returned+'</span></div></div>';
                 });
                 html+='</div></div>';
             }
 
-            // SKU Units Sold breakdown
+            // SKU breakdown
             var mSkus={};
             m.orders.forEach(function(o){
                 var sku=o.remark||o.items||'Unknown';
@@ -1223,30 +1310,37 @@ function renderMonthly(){
 
 // RENDERERS
 function renderDashboard(){
-    var sv=stockData.reduce(function(s,x){return s+(x.qty*x.cost);},0);
-    var sales=ordersData.reduce(function(s,x){return s+x.amount;},0);
     var recv=ordersData.reduce(function(s,x){return s+x.received;},0);
+    var losses=ordersData.reduce(function(s,x){return x.received<0?s+x.received:s;},0);
     var del=ordersData.filter(function(x){return x.status==='Delivered';}).length;
     var rto=ordersData.filter(function(x){return x.status==='RTO';}).length;
+    var ret=ordersData.filter(function(x){return x.status==='Return';}).length;
+    var exc=ordersData.filter(function(x){return x.status==='Exchange';}).length;
+    var pend=ordersData.filter(function(x){return x.status==='Shipped'||x.status==='Pending';}).length;
     var low=stockData.filter(function(x){return x.qty<=20;});
-    document.getElementById('d-stock').textContent='₹'+sv.toLocaleString();
-    document.getElementById('d-sales').textContent='₹'+sales.toLocaleString();
-    document.getElementById('d-recv').textContent='₹'+recv.toLocaleString();
-    document.getElementById('d-del').textContent=del;document.getElementById('d-rto').textContent=rto;
+    document.getElementById('d-orders').textContent=ordersData.length;
+    document.getElementById('d-recv').textContent='₹'+Math.round(recv).toLocaleString();
+    document.getElementById('d-losses').textContent='₹'+Math.round(Math.abs(losses)).toLocaleString();
+    document.getElementById('d-del').textContent=del;
+    document.getElementById('d-rto').textContent=rto;
+    document.getElementById('d-return').textContent=ret;
+    document.getElementById('d-exchange').textContent=exc;
+    document.getElementById('d-pending').textContent=pend;
     document.getElementById('alertBox').innerHTML=low.length>0?'<div class="alert alert-danger">⚠️ Low: '+low.map(function(x){return x.name+'('+x.qty+')';}).join(', ')+'</div>':'';
     document.getElementById('dashLow').innerHTML=low.length>0?low.slice(0,5).map(function(x){return'<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #fef3c7;font-size:0.75rem"><span>'+x.name+'</span><span style="color:#dc2626">'+x.qty+'</span></div>';}).join(''):'<div class="empty">All OK ✅</div>';
-    document.getElementById('dashRecent').innerHTML=ordersData.length>0?ordersData.slice(0,5).map(function(x){return'<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #fef3c7;font-size:0.7rem"><span>'+(x.remark||x.order_id.substring(0,10)+'..')+' <span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'?')+'</span></span><span>₹'+x.amount+'</span></div>';}).join(''):'<div class="empty">No orders</div>';
+    document.getElementById('dashRecent').innerHTML=ordersData.length>0?ordersData.slice(0,5).map(function(x){return'<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #fef3c7;font-size:0.7rem"><span>'+(x.remark||x.order_id.substring(0,10)+'..')+' <span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'?')+'</span></span><span>₹'+x.received+'</span></div>';}).join(''):'<div class="empty">No orders</div>';
 
     // Top 5 Selling SKUs
     var skuUnits={};
     ordersData.forEach(function(o){
         var sku=o.remark||o.items||'Unknown';
-        if(!skuUnits[sku])skuUnits[sku]={units:0,delivered:0,rto:0};
+        if(!skuUnits[sku])skuUnits[sku]={units:0,delivered:0,rto:0,returned:0};
         skuUnits[sku].units+=(o.qty||1);
         if(o.status==='Delivered')skuUnits[sku].delivered+=(o.qty||1);
         else if(o.status==='RTO')skuUnits[sku].rto+=(o.qty||1);
+        else if(o.status==='Return'||o.status==='Exchange')skuUnits[sku].returned+=(o.qty||1);
     });
-    var skuArr=Object.keys(skuUnits).map(function(k){return{name:k,units:skuUnits[k].units,delivered:skuUnits[k].delivered,rto:skuUnits[k].rto};}).sort(function(a,b){return b.units-a.units;});
+    var skuArr=Object.keys(skuUnits).map(function(k){return{name:k,units:skuUnits[k].units,delivered:skuUnits[k].delivered,rto:skuUnits[k].rto,returned:skuUnits[k].returned};}).sort(function(a,b){return b.units-a.units;});
     var top5=skuArr.slice(0,5);
     var maxU=top5.length>0?top5[0].units:1;
     document.getElementById('dashTopSku').innerHTML=top5.length>0?
@@ -1260,7 +1354,7 @@ function renderDashboard(){
                 '<span style="font-weight:600;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeAttr(s.name)+'"><span style="color:#d97706;font-weight:700">#'+(i+1)+'</span> '+escapeHtml(s.name)+catBadge+'</span>'+
                 '<span style="font-weight:700;color:#d97706">'+s.units+' units</span></div>'+
                 '<div style="background:#fef3c7;border-radius:4px;height:8px;overflow:hidden"><div style="background:linear-gradient(90deg,#f59e0b,#d97706);height:100%;width:'+pct+'%;border-radius:4px;transition:width 0.3s"></div></div>'+
-                '<div style="display:flex;gap:0.5rem;font-size:0.55rem;color:#78716c;margin-top:0.1rem"><span>✅ '+s.delivered+'</span><span>🔄 '+s.rto+'</span></div></div>';
+                '<div style="display:flex;gap:0.5rem;font-size:0.55rem;color:#78716c;margin-top:0.1rem"><span>✅ '+s.delivered+'</span><span>📦 '+s.rto+'</span><span>↩️ '+s.returned+'</span></div></div>';
         }).join(''):'<div class="empty">No orders</div>';
 }
 function renderStock(){
