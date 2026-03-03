@@ -924,44 +924,53 @@ window.handleFileUpload=async function(input){
             }
 
             // ===== IMPORT DATA =====
-            var imp=0,skip=0,upd=0,errors=0;
+            var imp=0,skip=0,upd=0,errors=0,emptyRows=0;
+            var totalDataRows=rows.length-dataStartRow;
+            console.log('Starting import: '+totalDataRows+' data rows from row '+dataStartRow);
+            console.log('Column mapping:', JSON.stringify(cm));
+
             for(var r=dataStartRow;r<rows.length;r++){
                 var row=rows[r];
-                if(!row)continue;
+                if(!row){emptyRows++;continue;}
 
                 var oid=(row[cm.orderId]||'').toString().trim();
-                if(!oid||oid.length<5)continue;
+                if(!oid||oid.length<3){emptyRows++;continue;}
 
                 var existing=ordersData.find(function(o){return o.order_id===oid;});
 
-                // ===== STATUS MAPPING (FIXED) =====
+                // ===== STATUS MAPPING =====
                 var rawStatus=(row[cm.status]!==undefined?row[cm.status]:'').toString().trim();
                 var status='Pending';
                 var sl=rawStatus.toLowerCase();
                 if(sl==='delivered'||sl.includes('deliver'))status='Delivered';
                 else if(sl==='rto'||sl==='return'||sl==='exchange'||sl.includes('rto')||sl.includes('return'))status='RTO';
                 else if(sl==='shipped'||sl==='dispatched'||sl.includes('ship'))status='Pending';
-                else if(rawStatus)status='Pending';
 
-                // Date parsing
+                // Date parsing - handles string, number, Date object
                 var od='';
-                if(cm.date!==undefined&&row[cm.date]){
+                if(cm.date!==undefined&&row[cm.date]!=null&&row[cm.date]!==''){
                     var d=row[cm.date];
-                    if(typeof d==='number'){
-                        od=new Date((d-25569)*86400*1000).toISOString().split('T')[0];
-                    }else{
-                        var ds=d.toString().trim();
-                        // Handle "2026-01-23 12:12:19" format
-                        if(ds.includes(' '))ds=ds.split(' ')[0];
-                        if(ds.includes('T'))ds=ds.split('T')[0];
-                        // Handle "23.01.2026" or "23/01/2026" format
-                        if(/^\d{2}[.\/]\d{2}[.\/]\d{4}$/.test(ds)){
-                            var parts=ds.split(/[.\/]/);
-                            od=parts[2]+'-'+parts[1]+'-'+parts[0];
+                    try{
+                        if(d instanceof Date){
+                            od=d.toISOString().split('T')[0];
+                        }else if(typeof d==='number'){
+                            od=new Date((d-25569)*86400*1000).toISOString().split('T')[0];
                         }else{
-                            od=ds;
+                            var ds=d.toString().trim();
+                            if(ds.includes(' '))ds=ds.split(' ')[0];
+                            if(ds.includes('T'))ds=ds.split('T')[0];
+                            if(/^\d{2}[.\/]\d{2}[.\/]\d{4}$/.test(ds)){
+                                var parts=ds.split(/[.\/]/);
+                                od=parts[2]+'-'+parts[1]+'-'+parts[0];
+                            }else if(/^\d{4}-\d{2}-\d{2}/.test(ds)){
+                                od=ds.substring(0,10);
+                            }else{
+                                var m2=ds.match(/(\d{4})-(\d{2})-(\d{2})/);
+                                if(m2)od=m2[1]+'-'+m2[2]+'-'+m2[3];
+                                else od=ds;
+                            }
                         }
-                    }
+                    }catch(dateErr){console.warn('Date parse err row '+r+':',dateErr,d);}
                 }
 
                 var sku=(cm.sku!==undefined&&row[cm.sku])?row[cm.sku].toString().trim():'';
@@ -972,16 +981,27 @@ window.handleFileUpload=async function(input){
                 var received=cm.received!==undefined?parseFloat(row[cm.received])||0:0;
                 var qty=cm.qty!==undefined?parseInt(row[cm.qty])||1:1;
 
+                // Log first 5 rows for debugging
+                if(r-dataStartRow<5)console.log('Row '+r+': id='+oid+', date='+od+', status='+status+', amt='+amount+', recv='+received);
+
                 if(existing){
                     try{
-                        var updateObj={status:status};
+                        // UPDATE ALL FIELDS - never lose data on re-import
+                        var updateObj={
+                            status:status,
+                            amount:amount,
+                            received:received,
+                            qty:qty,
+                            order_date:od||existing.order_date,
+                            items:productName||existing.items,
+                            platform:'meesho'
+                        };
                         if(size)updateObj.size=size;
                         if(state)updateObj.state=state;
                         if(sku)updateObj.remark=sku;
-                        if(received!==0)updateObj.received=received;
                         await db.from('orders').update(updateObj).eq('id',existing.id);
                         upd++;
-                    }catch(err){errors++;}
+                    }catch(err){errors++;console.error('Update err row '+r+' ('+oid+'):',err.message);}
                 } else {
                     try{
                         await db.from('orders').insert({
@@ -998,16 +1018,38 @@ window.handleFileUpload=async function(input){
                             order_date:od||new Date().toISOString().split('T')[0]
                         });
                         imp++;
-                    }catch(err){skip++;console.error('Insert error row '+r+':',err.message);}
+                    }catch(err){
+                        skip++;
+                        console.error('Insert err row '+r+' ('+oid+'):',err.message);
+                    }
                 }
 
                 // Progress update every 50 rows
                 if((r-dataStartRow)%50===0&&r>dataStartRow){
-                    statusDiv.innerHTML='<div class="alert alert-info">📊 Processing... '+Math.round((r-dataStartRow)/(rows.length-dataStartRow)*100)+'% ('+imp+' new, '+upd+' updated)</div>';
-                }
+                    statusDiv.innerHTML='<div class="alert alert-info">Processing... '+Math.round((r-dataStartRow)/totalDataRows*100)+'% ('+imp+' new, '+upd+' updated)</div>';
+                }}
             }
             await loadOrders();
-            statusDiv.innerHTML='<div class="alert alert-success">✅ Import done! New: <b>'+imp+'</b> | Updated: <b>'+upd+'</b> | Skipped: <b>'+skip+'</b>'+(errors>0?' | Errors: <b>'+errors+'</b>':'')+'</div>';
+            statusDiv.innerHTML='<div class="alert alert-success">✅ Import done!<br><b>'+imp+'</b> new | <b>'+upd+'</b> updated | <b>'+skip+'</b> skipped'+(errors>0?' | <b>'+errors+'</b> errors':'')+(emptyRows>0?' | <b>'+emptyRows+'</b> empty rows':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Total in file: '+totalDataRows+' rows | Processed: '+(imp+upd+skip+errors)+' orders</span></div>';
+            // Build month-wise summary
+            var monthSum={};
+            ordersData.forEach(function(o){
+                var d=o.order_date||'';
+                var mk=(d&&d.length>=7)?d.substring(0,7):'Unknown';
+                if(!monthSum[mk])monthSum[mk]={count:0,del:0,rto:0,pend:0};
+                monthSum[mk].count++;
+                if(o.status==='Delivered')monthSum[mk].del++;
+                else if(o.status==='RTO')monthSum[mk].rto++;
+                else monthSum[mk].pend++;
+            });
+            var mKeys=Object.keys(monthSum).sort().reverse();
+            if(mKeys.length>0){
+                var mSumHtml=mKeys.map(function(k){
+                    var ms=monthSum[k];
+                    return '<span style="background:#fef3c7;padding:0.2rem 0.5rem;border-radius:6px;font-size:0.65rem;display:inline-block;margin:0.15rem">'+k+': <b>'+ms.count+'</b> (D:'+ms.del+' R:'+ms.rto+' P:'+ms.pend+')</span>';
+                }).join(' ');
+                statusDiv.innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.7rem">Monthly breakdown: '+mSumHtml+'</div>';
+            }
             setStatus('✅ Import done!');input.value='';
         }catch(err){
             console.error('Import error:',err);
