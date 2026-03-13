@@ -555,7 +555,17 @@ function setStatus(msg,type){var bar=document.getElementById('statusBar');bar.te
 
 // DATA
 async function loadStock(){try{var r=await db.from('stock').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);stockData=r.data||[];renderStock();renderDashboard();populateItemDropdown();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
-async function loadOrders(){try{var r=await db.from('orders').select('*').order('created_at',{ascending:false});if(r.error)throw new Error(r.error.message);ordersData=r.data||[];renderOrders();renderDashboard();renderMonthly();renderStock();return true;}catch(err){setStatus('❌ '+err.message,'error');return false;}}
+async function loadOrders(){try{
+    // Load ALL orders (Supabase default limit is 1000)
+    var allOrders=[],from=0,batchSize=1000,hasMore=true;
+    while(hasMore){
+        var r=await db.from('orders').select('*').order('created_at',{ascending:false}).range(from,from+batchSize-1);
+        if(r.error)throw new Error(r.error.message);
+        if(r.data&&r.data.length>0){allOrders=allOrders.concat(r.data);from+=batchSize;if(r.data.length<batchSize)hasMore=false;}
+        else hasMore=false;
+    }
+    ordersData=allOrders;renderOrders();renderDashboard();renderMonthly();renderStock();return true;
+}catch(err){setStatus('❌ '+err.message,'error');return false;}}
 async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('category',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){skuData=[];renderSkus();document.getElementById('skuContainer').innerHTML='<div class="alert alert-danger">⚠️ Table <b>sku_map</b> not found. Create it in Supabase SQL Editor.</div>';return true;}throw new Error(r.error.message);}skuData=r.data||[];renderSkus();return true;}catch(err){skuData=[];renderSkus();return true;}}
 async function loadScanHistory(){try{var r=await db.from('scan_history').select('*');if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){scanHistory=[];return true;}throw new Error(r.error.message);}scanHistory=r.data||[];return true;}catch(err){scanHistory=[];return true;}}
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
@@ -1234,24 +1244,18 @@ window.handleFileUpload=async function(input){
             allOrders=mergedOrders;
             console.log('After merge: '+allOrders.length+' unique orders ('+mergedCount+' rows merged for affiliate fees/claims)');
 
-            // Remove duplicates already in DB
-            var existingIds={};
-            ordersData.forEach(function(o){existingIds[o.order_id]=true;});
-            var newOrders=allOrders.filter(function(o){return !existingIds[o.order_id];});
-            var dupCount=allOrders.length-newOrders.length;
-
             statusDiv.innerHTML='<div class="alert alert-info">Parsed <b>'+allOrders.length+'</b> unique orders ('+mergedCount+' fee/adjustment rows merged). Uploading...</div>';
-            console.log('Parsed:',allOrders.length,'New:',newOrders.length,'Dup:',dupCount);
+            console.log('Parsed:',allOrders.length,'Merged:',mergedCount);
 
-            // Step 2: Insert in small batches of 10 with 500ms delay
+            // Step 2: Upsert ALL orders in batches (insert new + update existing)
             var BATCH=10;
-            for(var b=0;b<newOrders.length;b+=BATCH){
-                var batch=newOrders.slice(b,b+BATCH);
+            for(var b=0;b<allOrders.length;b+=BATCH){
+                var batch=allOrders.slice(b,b+BATCH);
                 var batchOk=false;
 
-                // Try batch insert first
+                // Try batch upsert first (insert or update)
                 try{
-                    var res=await db.from('orders').insert(batch);
+                    var res=await db.from('orders').upsert(batch,{onConflict:'order_id'});
                     if(!res.error){imp+=batch.length;batchOk=true;}
                     else{console.warn('Batch err at '+b+':',res.error.message);}
                 }catch(e){console.warn('Batch exception at '+b+':',e.message);}
@@ -1260,7 +1264,7 @@ window.handleFileUpload=async function(input){
                 if(!batchOk){
                     for(var bi=0;bi<batch.length;bi++){
                         try{
-                            var r2=await db.from('orders').insert(batch[bi]);
+                            var r2=await db.from('orders').upsert(batch[bi],{onConflict:'order_id'});
                             if(!r2.error){imp++;}
                             else{errors++;if(errorMsgs.length<20)errorMsgs.push(batch[bi].order_id+': '+r2.error.message);}
                         }catch(e2){errors++;if(errorMsgs.length<20)errorMsgs.push(batch[bi].order_id+': '+e2.message);}
@@ -1270,38 +1274,20 @@ window.handleFileUpload=async function(input){
                 }
 
                 // Progress update
-                var done=Math.min(b+BATCH,newOrders.length);
-                var pct=Math.round(done/newOrders.length*100);
-                statusDiv.innerHTML='<div class="alert alert-info" style="font-size:0.85rem">Uploading... <b>'+pct+'%</b> ('+imp+'/'+newOrders.length+' inserted)'+(errors>0?' <span style="color:red">'+errors+' errors</span>':'')+'</div>';
+                var done=Math.min(b+BATCH,allOrders.length);
+                var pct=Math.round(done/allOrders.length*100);
+                statusDiv.innerHTML='<div class="alert alert-info" style="font-size:0.85rem">Uploading... <b>'+pct+'%</b> ('+imp+'/'+allOrders.length+')'+(errors>0?' <span style="color:red">'+errors+' errors</span>':'')+'</div>';
 
                 // 500ms delay between batches to avoid rate limiting
                 await new Promise(function(ok){setTimeout(ok,500);});
             }
 
-            // Step 3: Update existing orders (batch by batch)
-            var updCount=0;
-            if(dupCount>0){
-                statusDiv.innerHTML='<div class="alert alert-info">Updating '+dupCount+' existing orders...</div>';
-                var existList=[];
-                allOrders.forEach(function(o){
-                    var ex=ordersData.find(function(e){return e.order_id===o.order_id;});
-                    if(ex)existList.push({id:ex.id,data:o});
-                });
-                for(var u=0;u<existList.length;u++){
-                    try{
-                        var res=await db.from('orders').update(existList[u].data).eq('id',existList[u].id);
-                        if(!res.error)updCount++;
-                    }catch(e){}
-                    if(u%10===9)await new Promise(function(ok){setTimeout(ok,300);});
-                }
-            }
-
-            // Step 4: Reload and verify
+            // Step 3: Reload and verify
             await loadOrders();
             // Step 5: Auto-sync SKUs to stock
             var syncResult=await syncSkusToStock(true);
             var afterCount=ordersData.length;
-            var resultHtml='<div class="alert alert-success">Import done!<br><b>'+imp+'</b> new inserted | <b>'+updCount+'</b> updated | <b>'+mergedCount+'</b> fee rows merged'+(syncResult.added>0?' | <b style="color:#f59e0b">'+syncResult.added+' new SKUs added to stock</b>':'')+(errors>0?' | <b style="color:red">'+errors+' errors</b>':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Rows read: '+rows.length+' | Unique orders: '+allOrders.length+' | DB now: '+afterCount+' total</span></div>';
+            var resultHtml='<div class="alert alert-success">Import done!<br><b>'+imp+'</b> orders saved | <b>'+mergedCount+'</b> fee rows merged'+(syncResult.added>0?' | <b style="color:#f59e0b">'+syncResult.added+' new SKUs added to stock</b>':'')+(errors>0?' | <b style="color:red">'+errors+' errors</b>':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Rows read: '+rows.length+' | Unique orders: '+allOrders.length+' | DB now: '+afterCount+' total</span></div>';
             if(errorMsgs.length>0){
                 resultHtml+='<div class="alert alert-danger" style="margin-top:0.3rem;font-size:0.65rem;max-height:100px;overflow-y:auto"><b>Errors:</b><br>'+errorMsgs.join('<br>')+'</div>';
             }
