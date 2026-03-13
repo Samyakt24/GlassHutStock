@@ -457,16 +457,20 @@
                     <h4>🏷️ Add SKU to Category</h4>
                     <p style="font-size:0.75rem;color:#6b7280;margin-bottom:1rem">Add Meesho SKU names and assign them to categories. Used when counting labels from PDF.</p>
                     <div class="form-row">
-                        <div class="form-grp" style="flex:2"><label>SKU Name *</label><input type="text" id="sku-name" placeholder="e.g. GLASS-BANGLE-LM-24-RED"></div>
-                        <div class="form-grp"><label>Category *</label><select id="sku-cat">
+                        <div class="form-grp"><label>Category *</label><select id="sku-cat" onchange="if(this.value==='__new__')document.getElementById('new-cat-row').style.display='flex'; else document.getElementById('new-cat-row').style.display='none';">
                             <option value="Light Multi 24">Light Multi 24</option>
                             <option value="Light Multi 12">Light Multi 12</option>
                             <option value="Dark Multi 24">Dark Multi 24</option>
                             <option value="Dark Multi 12">Dark Multi 12</option>
                             <option value="GOLD Multi 24">GOLD Multi 24</option>
+                            <option value="__new__">➕ Add New Category...</option>
                         </select></div>
+                        <div class="form-grp" id="new-cat-row" style="display:none"><label>New Category Name *</label><input type="text" id="new-cat-name" placeholder="e.g. Tricolor 36"></div>
                     </div>
-                    <div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.5rem"><button class="btn btn-primary" onclick="addSku()">➕ Add SKU</button></div>
+                    <div class="form-row">
+                        <div class="form-grp" style="flex:2"><label>SKU Name *</label><input type="text" id="sku-name" placeholder="e.g. GLASS-BANGLE-LM-24-RED"></div>
+                        <div class="form-grp" style="align-self:flex-end"><button class="btn btn-primary" onclick="addSku()">➕ Add SKU</button></div>
+                    </div>
                 </div>
                 <div class="card">
                     <div class="card-header"><span>🏷️ SKU Mappings (<span id="skuCnt">0</span>)</span></div>
@@ -560,11 +564,32 @@ async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await 
 
 // SKU CRUD
 async function addSku(){
-    var skuName=document.getElementById('sku-name').value.trim(),category=document.getElementById('sku-cat').value;
+    var skuName=document.getElementById('sku-name').value.trim();
+    var catSelect=document.getElementById('sku-cat');
+    var category=catSelect.value;
+    if(category==='__new__'){
+        category=document.getElementById('new-cat-name').value.trim();
+        if(!category){alert('Enter new category name');return;}
+    }
     if(!skuName){alert('Enter SKU name');return;}
     if(skuData.find(function(s){return normSku(s.sku_name)===normSku(skuName);})){alert('SKU already exists!');return;}
     setStatus('🔄 Adding SKU...','syncing');
-    try{var r=await db.from('sku_map').insert({sku_name:skuName,category:category});if(r.error)throw new Error(r.error.message);document.getElementById('sku-name').value='';await loadSkus();if(pdfUploads.length>0)renderPdfHistory();setStatus('✅ SKU added!');}catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message);}
+    try{var r=await db.from('sku_map').insert({sku_name:skuName,category:category});if(r.error)throw new Error(r.error.message);document.getElementById('sku-name').value='';document.getElementById('new-cat-name').value='';document.getElementById('new-cat-row').style.display='none';await loadSkus();refreshCategoryDropdown();if(pdfUploads.length>0)renderPdfHistory();setStatus('✅ SKU added!');}catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message);}
+}
+function refreshCategoryDropdown(){
+    var sel=document.getElementById('sku-cat');
+    var current=sel.value;
+    var defaults=['Light Multi 24','Light Multi 12','Dark Multi 24','Dark Multi 12','GOLD Multi 24'];
+    var custom=[];
+    skuData.forEach(function(s){
+        if(defaults.indexOf(s.category)===-1&&custom.indexOf(s.category)===-1)custom.push(s.category);
+    });
+    sel.innerHTML='';
+    defaults.concat(custom.sort()).forEach(function(c){
+        sel.innerHTML+='<option value="'+c+'">'+c+'</option>';
+    });
+    sel.innerHTML+='<option value="__new__">➕ Add New Category...</option>';
+    if(current&&current!=='__new__')sel.value=current;
 }
 window.addSku=addSku;
 window.deleteSku=async function(id){if(!confirm('Remove this SKU?'))return;try{await db.from('sku_map').delete().eq('id',id);await loadSkus();setStatus('✅ SKU removed');}catch(err){setStatus('❌ '+err.message,'error');}};
@@ -578,18 +603,25 @@ window.quickAssignSku=async function(skuName){
 function renderSkus(){
     document.getElementById('skuCnt').textContent=skuData.length;
     var c=document.getElementById('skuContainer');
-    if(skuData.length===0){c.innerHTML='<div class="empty">No SKU mappings yet.</div>';return;}
-    var grouped={};CATEGORIES.forEach(function(cat){grouped[cat]=[];});
+    if(skuData.length===0){c.innerHTML='<div class="empty">No SKU mappings yet.</div>';refreshCategoryDropdown();return;}
+    // Collect all categories (default + custom)
+    var allCats=CATEGORIES.slice();
+    skuData.forEach(function(s){if(allCats.indexOf(s.category)===-1)allCats.push(s.category);});
+    var grouped={};
+    allCats.forEach(function(cat){grouped[cat]=[];});
     skuData.forEach(function(s){if(!grouped[s.category])grouped[s.category]=[];grouped[s.category].push(s);});
     var html='';
-    CATEGORIES.forEach(function(cat){
+    allCats.forEach(function(cat){
         var items=grouped[cat]||[];
-        html+='<div class="cat-section"><div class="cat-section-head"><h5><span class="cat-chip '+CAT_COLORS[cat]+'">'+cat+'</span> <span style="font-size:0.75rem;color:#9ca3af">('+items.length+')</span></h5></div><div class="sku-list">';
+        if(items.length===0&&CATEGORIES.indexOf(cat)===-1)return; // hide empty custom categories
+        var chipClass=CAT_COLORS[cat]||'cat-uncategorized';
+        html+='<div class="cat-section"><div class="cat-section-head"><h5><span class="cat-chip '+chipClass+'">'+cat+'</span> <span style="font-size:0.75rem;color:#9ca3af">('+items.length+')</span></h5></div><div class="sku-list">';
         if(items.length===0){html+='<span style="font-size:0.7rem;color:#d1d5db;padding:0.25rem">No SKUs</span>';}
         else{items.forEach(function(s){html+='<span class="sku-tag">'+escapeHtml(s.sku_name)+' <button class="remove-sku" onclick="deleteSku('+s.id+')" title="Remove">×</button></span>';});}
         html+='</div></div>';
     });
     c.innerHTML=html;
+    refreshCategoryDropdown();
 }
 
 // PDF PARSING
@@ -627,9 +659,10 @@ window.handlePdfUpload=async function(input){
             var orderId=extractOrderId(pageText,items);
             var sku=extractSku(pageText,items);
             var size=extractSize(pageText,items);
+            var partner=extractPartner(pageText);
             if(orderId||sku){
                 var isDup=orderId?scanHistory.some(function(h){return h.order_id===orderId;}):false;
-                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',isDuplicate:isDup,page:i});
+                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',partner:partner,isDuplicate:isDup,page:i});
             }
         }
         lastPdfLabels=labels;
@@ -648,7 +681,7 @@ window.handlePdfUpload=async function(input){
         await loadPdfHistory();
         if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
         renderPdfHistory();
-        statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (by SKU)</button></div>';
+        statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (Partner → SKU → Size)</button></div>';
         setStatus('✅ PDF parsed!');input.value='';
     }catch(err){statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';setStatus('❌ PDF error','error');input.value='';}
 };
@@ -659,23 +692,26 @@ window.downloadSortedPdf=async function(){
     try{
         var srcDoc=await PDFLib.PDFDocument.load(lastPdfData);
         var newDoc=await PDFLib.PDFDocument.create();
-        // Group labels by SKU + Size and sort
+        // Group labels by Partner + SKU + Size and sort
         var skuGroups={};
         lastPdfLabels.forEach(function(l){
+            var partner=l.partner||'Other';
             var sku=l.sku||'Unknown';
             var size=l.size||'-';
-            var key=sku+'|||'+size;
-            if(!skuGroups[key])skuGroups[key]={sku:sku,size:size,pages:[]};
+            var key=partner+'|||'+sku+'|||'+size;
+            if(!skuGroups[key])skuGroups[key]={partner:partner,sku:sku,size:size,pages:[]};
             skuGroups[key].pages.push(l.page-1);
         });
-        // Sort: SKU alphabetically (Unknown last), then size within each SKU
+        // Sort: Partner first, then SKU alphabetically, then size
         var sortedKeys=Object.keys(skuGroups).sort(function(a,b){
             var ga=skuGroups[a],gb=skuGroups[b];
+            var partnerCmp=ga.partner.toLowerCase().localeCompare(gb.partner.toLowerCase());
+            if(partnerCmp!==0)return partnerCmp;
             if(ga.sku==='Unknown'&&gb.sku!=='Unknown')return 1;
             if(gb.sku==='Unknown'&&ga.sku!=='Unknown')return -1;
             var skuCmp=ga.sku.toLowerCase().localeCompare(gb.sku.toLowerCase());
             if(skuCmp!==0)return skuCmp;
-            return parseFloat(ga.size)||0 - parseFloat(gb.size)||0;
+            return (parseFloat(ga.size)||0)-(parseFloat(gb.size)||0);
         });
         // Copy pages in sorted order
         var pageOrder=[];
@@ -696,7 +732,14 @@ window.downloadSortedPdf=async function(){
         a.click();
         URL.revokeObjectURL(url);
         // Show summary
-        var summary=sortedKeys.map(function(key){var g=skuGroups[key];return g.sku+' ('+g.size+'") × '+g.pages.length;}).join(', ');
+        // Show summary grouped by partner
+        var partnerSummary={};
+        sortedKeys.forEach(function(key){
+            var g=skuGroups[key];
+            if(!partnerSummary[g.partner])partnerSummary[g.partner]=[];
+            partnerSummary[g.partner].push(g.sku+' ('+g.size+'") × '+g.pages.length);
+        });
+        var summary=Object.keys(partnerSummary).map(function(p){return'<b>'+p+'</b>: '+partnerSummary[p].join(', ');}).join('<br>');
         setStatus('✅ Sorted PDF downloaded!');
         document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.65rem">📋 Sorted order: '+summary+'</div>';
     }catch(err){
@@ -797,20 +840,40 @@ function buildCardDetails(upload){
     if(totalPack>0){
         var skuQty={};
         newLabels.forEach(function(l){
+            var partner=l.partner||'Other';
             var sku=l.sku||'Unknown';
-            if(!skuQty[sku])skuQty[sku]={qty:0,sizes:{}};
-            skuQty[sku].qty++;
+            var key=partner+'|||'+sku;
+            if(!skuQty[key])skuQty[key]={partner:partner,sku:sku,qty:0,sizes:{}};
+            skuQty[key].qty++;
             var sz=l.size||'-';
-            skuQty[sku].sizes[sz]=(skuQty[sku].sizes[sz]||0)+1;
+            skuQty[key].sizes[sz]=(skuQty[key].sizes[sz]||0)+1;
         });
-        var skuList=Object.keys(skuQty).map(function(k){return{sku:k,qty:skuQty[k].qty,sizes:skuQty[k].sizes};}).sort(function(a,b){return b.qty-a.qty;});
+        var skuList=Object.values(skuQty).sort(function(a,b){
+            var pc=a.partner.localeCompare(b.partner);
+            if(pc!==0)return pc;
+            return b.qty-a.qty;
+        });
+        // Partner totals
+        var partnerTotals={};
+        skuList.forEach(function(s){partnerTotals[s.partner]=(partnerTotals[s.partner]||0)+s.qty;});
+        var partnerPills=Object.keys(partnerTotals).map(function(p){
+            var colors={'Shadowfax':'#7c3aed','Valmo':'#2563eb','Xpressbees':'#d97706','Delhivery':'#dc2626','Ecom Express':'#059669','Other':'#6b7280'};
+            var c=colors[p]||'#6b7280';
+            return '<span style="background:'+c+'15;color:'+c+';padding:0.2rem 0.5rem;border-radius:6px;font-size:0.7rem;font-weight:600">'+p+': '+partnerTotals[p]+'</span>';
+        }).join(' ');
         html+='<div style="background:#fffbeb;border:2px solid #fde68a;border-radius:12px;padding:1rem;margin-bottom:1rem">';
-        html+='<div style="font-weight:700;font-size:0.9rem;color:#92400e;margin-bottom:0.5rem">📋 Packing List by SKU ('+skuList.length+' SKUs, '+totalPack+' total)</div>';
-        html+='<table style="width:100%;font-size:0.75rem"><thead><tr><th style="text-align:left;padding:0.3rem;border-bottom:2px solid #fcd34d">#</th><th style="text-align:left;padding:0.3rem;border-bottom:2px solid #fcd34d">SKU Name</th><th style="text-align:center;padding:0.3rem;border-bottom:2px solid #fcd34d">Qty</th><th style="text-align:left;padding:0.3rem;border-bottom:2px solid #fcd34d">Sizes</th></tr></thead><tbody>';
-        skuList.forEach(function(s,i){
+        html+='<div style="font-weight:700;font-size:0.9rem;color:#92400e;margin-bottom:0.3rem">📋 Packing List ('+skuList.length+' SKUs, '+totalPack+' total)</div>';
+        html+='<div style="margin-bottom:0.5rem;display:flex;flex-wrap:wrap;gap:0.3rem">'+partnerPills+'</div>';
+        html+='<table style="width:100%;font-size:0.75rem"><thead><tr><th style="text-align:left;padding:0.3rem;border-bottom:2px solid #fcd34d">Partner</th><th style="text-align:left;padding:0.3rem;border-bottom:2px solid #fcd34d">SKU Name</th><th style="text-align:center;padding:0.3rem;border-bottom:2px solid #fcd34d">Qty</th><th style="text-align:left;padding:0.3rem;border-bottom:2px solid #fcd34d">Sizes</th></tr></thead><tbody>';
+        var lastPartner='';
+        skuList.forEach(function(s){
             var sizeText=Object.keys(s.sizes).sort().map(function(sz){return sz+'" × '+s.sizes[sz];}).join(', ');
             var barPct=Math.round(s.qty/skuList[0].qty*100);
-            html+='<tr style="border-bottom:1px solid #fef3c7"><td style="padding:0.3rem;color:#d97706;font-weight:700">'+(i+1)+'</td><td style="padding:0.3rem"><b>'+escapeHtml(s.sku)+'</b><div style="background:#fef3c7;border-radius:3px;height:4px;margin-top:0.2rem;overflow:hidden"><div style="background:#f59e0b;height:100%;width:'+barPct+'%"></div></div></td><td style="text-align:center;padding:0.3rem;font-weight:700;font-size:0.9rem;color:#d97706">'+s.qty+'</td><td style="padding:0.3rem;font-size:0.65rem;color:#6b7280">'+sizeText+'</td></tr>';
+            var showPartner=s.partner!==lastPartner;
+            lastPartner=s.partner;
+            var colors={'Shadowfax':'#7c3aed','Valmo':'#2563eb','Xpressbees':'#d97706','Delhivery':'#dc2626','Ecom Express':'#059669','Other':'#6b7280'};
+            var c=colors[s.partner]||'#6b7280';
+            html+='<tr style="border-bottom:1px solid #fef3c7'+(showPartner?';border-top:2px solid '+c:'')+'"><td style="padding:0.3rem;font-size:0.65rem;color:'+c+';font-weight:600">'+(showPartner?s.partner:'')+'</td><td style="padding:0.3rem"><b>'+escapeHtml(s.sku)+'</b><div style="background:#fef3c7;border-radius:3px;height:4px;margin-top:0.2rem;overflow:hidden"><div style="background:'+c+';height:100%;width:'+barPct+'%"></div></div></td><td style="text-align:center;padding:0.3rem;font-weight:700;font-size:0.9rem;color:#d97706">'+s.qty+'</td><td style="padding:0.3rem;font-size:0.65rem;color:#6b7280">'+sizeText+'</td></tr>';
         });
         html+='</tbody></table></div>';
     }
@@ -824,13 +887,13 @@ function buildCardDetails(upload){
     });
     html+='</div></details>';
     html+='<details><summary style="cursor:pointer;font-weight:600;font-size:0.8rem;color:#92400e;padding:0.5rem 0">📋 All Labels ('+all.length+')</summary>';
-    html+='<div style="overflow-x:auto;max-height:350px;margin-top:0.5rem"><table><thead><tr><th>Order ID</th><th>SKU</th><th>Size</th><th>Category</th><th>Status</th></tr></thead><tbody>';
+    html+='<div style="overflow-x:auto;max-height:350px;margin-top:0.5rem"><table><thead><tr><th>Order ID</th><th>SKU</th><th>Size</th><th>Partner</th><th>Category</th><th>Status</th></tr></thead><tbody>';
     all.forEach(function(l){
         var match=findCategory(l.sku);
         var catLabel=match?'<span class="cat-chip '+(CAT_COLORS[match.category]||'cat-uncategorized')+'">'+match.category+'</span>':'<span class="cat-chip cat-uncategorized">Uncategorized</span>';
         var statusBadge=l.isDuplicate?'<span class="badge badge-dup">🔁 OLD</span>':'<span class="badge badge-new">🆕 NEW</span>';
         var rowClass=l.isDuplicate?'row-dup':'row-new';
-        html+='<tr class="'+rowClass+'"><td style="font-size:0.55rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeAttr(l.orderId)+'">'+escapeHtml(l.orderId)+'</td><td style="font-size:0.6rem"><b>'+escapeHtml(l.sku)+'</b></td><td style="font-weight:600">'+(l.size||'-')+'"</td><td>'+catLabel+'</td><td>'+statusBadge+'</td></tr>';
+        html+='<tr class="'+rowClass+'"><td style="font-size:0.55rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escapeAttr(l.orderId)+'">'+escapeHtml(l.orderId)+'</td><td style="font-size:0.6rem"><b>'+escapeHtml(l.sku)+'</b></td><td style="font-weight:600">'+(l.size||'-')+'"</td><td style="font-size:0.6rem">'+(l.partner||'-')+'</td><td>'+catLabel+'</td><td>'+statusBadge+'</td></tr>';
     });
     html+='</tbody></table></div></details>';
     return html;
@@ -898,6 +961,17 @@ function extractSize(text,items){
         if(/^\d+\.\d{1,2}$/.test(val)&&parseFloat(val)>=1.5&&parseFloat(val)<=3.5)return val;
     }
     return null;
+}
+
+function extractPartner(text){
+    var t=text.toLowerCase();
+    if(t.includes('shadowfax'))return 'Shadowfax';
+    if(t.includes('valmo'))return 'Valmo';
+    if(t.includes('xpress'))return 'Xpressbees';
+    if(t.includes('delhivery'))return 'Delhivery';
+    if(t.includes('ecom')&&t.includes('express'))return 'Ecom Express';
+    if(t.includes('ekart'))return 'Ekart';
+    return 'Other';
 }
 
 // STOCK
