@@ -699,13 +699,16 @@ window.handlePdfUpload=async function(input){
 
 window.downloadSortedPdf=async function(){
     if(!lastPdfData||!lastPdfLabels){alert('Upload a label PDF first');return;}
-    setStatus('🔄 Generating sorted PDF...','syncing');
+    // Only include NEW labels (not duplicates)
+    var newLabels=lastPdfLabels.filter(function(l){return !l.isDuplicate;});
+    if(newLabels.length===0){alert('No new labels to sort! All labels are duplicates (already packed).');return;}
+    setStatus('🔄 Generating sorted PDF ('+newLabels.length+' new labels)...','syncing');
     try{
         var srcDoc=await PDFLib.PDFDocument.load(lastPdfData);
         var newDoc=await PDFLib.PDFDocument.create();
-        // Group labels by SKU + Qty and sort
+        // Group NEW labels by SKU + Qty and sort
         var skuGroups={};
-        lastPdfLabels.forEach(function(l){
+        newLabels.forEach(function(l){
             var sku=l.sku||'Unknown';
             var qty=l.qty||1;
             var key=sku+'|||'+qty;
@@ -741,12 +744,13 @@ window.downloadSortedPdf=async function(){
         URL.revokeObjectURL(url);
         // Show summary
         // Show summary grouped by partner
+        var dupCount=lastPdfLabels.length-newLabels.length;
         var summary=sortedKeys.map(function(key){
             var g=skuGroups[key];
             return g.sku+' (qty:'+g.qty+') × '+g.pages.length+' labels';
         }).join(', ');
         setStatus('✅ Sorted PDF downloaded!');
-        document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.65rem">📋 Sorted order: '+summary+'</div>';
+        document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.65rem">📋 <b>'+newLabels.length+' new labels</b> sorted'+(dupCount>0?' ('+dupCount+' duplicates removed)':'')+'<br>Order: '+summary+'</div>';
     }catch(err){
         setStatus('❌ Sort failed: '+err.message,'error');
         alert('Error generating sorted PDF: '+err.message);
