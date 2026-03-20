@@ -692,7 +692,7 @@ window.handlePdfUpload=async function(input){
         await loadPdfHistory();
         if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
         renderPdfHistory();
-        statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (SKU → Qty)</button></div>';
+        statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (SKU → Size → Qty)</button></div>';
         setStatus('✅ PDF parsed!');input.value='';
     }catch(err){statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';setStatus('❌ PDF error','error');input.value='';}
 };
@@ -706,22 +706,25 @@ window.downloadSortedPdf=async function(){
     try{
         var srcDoc=await PDFLib.PDFDocument.load(lastPdfData);
         var newDoc=await PDFLib.PDFDocument.create();
-        // Group NEW labels by SKU + Qty and sort
+        // Group NEW labels by SKU + Size + Qty and sort
         var skuGroups={};
         newLabels.forEach(function(l){
             var sku=l.sku||'Unknown';
+            var size=l.size||'-';
             var qty=l.qty||1;
-            var key=sku+'|||'+qty;
-            if(!skuGroups[key])skuGroups[key]={sku:sku,qty:qty,pages:[]};
+            var key=sku+'|||'+size+'|||'+qty;
+            if(!skuGroups[key])skuGroups[key]={sku:sku,size:size,qty:qty,pages:[]};
             skuGroups[key].pages.push(l.page-1);
         });
-        // Sort: SKU alphabetically (Unknown last), then Qty ascending
+        // Sort: SKU alphabetically, then Size ascending, then Qty ascending
         var sortedKeys=Object.keys(skuGroups).sort(function(a,b){
             var ga=skuGroups[a],gb=skuGroups[b];
             if(ga.sku==='Unknown'&&gb.sku!=='Unknown')return 1;
             if(gb.sku==='Unknown'&&ga.sku!=='Unknown')return -1;
             var skuCmp=ga.sku.toLowerCase().localeCompare(gb.sku.toLowerCase());
             if(skuCmp!==0)return skuCmp;
+            var sizeCmp=(parseFloat(ga.size)||0)-(parseFloat(gb.size)||0);
+            if(sizeCmp!==0)return sizeCmp;
             return ga.qty-gb.qty;
         });
         // Copy pages in sorted order
@@ -747,7 +750,7 @@ window.downloadSortedPdf=async function(){
         var dupCount=lastPdfLabels.length-newLabels.length;
         var summary=sortedKeys.map(function(key){
             var g=skuGroups[key];
-            return g.sku+' (qty:'+g.qty+') × '+g.pages.length+' labels';
+            return g.sku+' ('+g.size+'", qty:'+g.qty+') × '+g.pages.length;
         }).join(', ');
         setStatus('✅ Sorted PDF downloaded!');
         document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.65rem">📋 <b>'+newLabels.length+' new labels</b> sorted'+(dupCount>0?' ('+dupCount+' duplicates removed)':'')+'<br>Order: '+summary+'</div>';
