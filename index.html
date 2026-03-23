@@ -1431,11 +1431,12 @@ window.addProduct=async function(){
     if(!name){alert('Enter product name');return;}
     setStatus('Adding product...','syncing');
     try{
-        var res=await db.from('products').insert({name:name,cost:cost});
+        var res=await db.from('products').insert({name:name,cost:cost}).select();
         if(res.error)throw new Error(res.error.message);
+        if(!res.data||res.data.length===0)throw new Error('Insert failed - RLS blocking. Run in Supabase:\nALTER TABLE products DISABLE ROW LEVEL SECURITY;');
         document.getElementById('p-name').value='';document.getElementById('p-cost').value='';
         await loadProducts();setStatus('✅ Product added');
-    }catch(err){setStatus('❌ '+err.message,'error');alert('Error adding product: '+err.message);}
+    }catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message);}
 };
 window.delProduct=async function(id){
     if(!confirm('Delete this product? SKUs mapped to it will become unmapped.'))return;
@@ -1447,14 +1448,15 @@ window.delProduct=async function(id){
     }catch(err){setStatus('❌ '+err.message,'error');}
 };
 window.updateProductCost=async function(id,val){
+    var newCost=parseFloat(val)||0;
     try{
-        var res=await db.from('products').update({cost:parseFloat(val)||0}).eq('id',id);
+        var res=await db.from('products').update({cost:newCost}).eq('id',id).select();
         if(res.error)throw new Error(res.error.message);
-        // Update local data without full re-render
-        productsData.forEach(function(p){if(p.id===id)p.cost=parseFloat(val)||0;});
+        if(!res.data||res.data.length===0)throw new Error('Update failed - no rows affected. Check RLS on products table.');
+        productsData.forEach(function(p){if(p.id===id)p.cost=newCost;});
         renderDashboard();
-        setStatus('✅ Cost updated');
-    }catch(err){setStatus('❌ '+err.message,'error');alert('Error updating cost: '+err.message);}
+        setStatus('✅ Cost updated to ₹'+newCost);
+    }catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message+'\n\nTry running in Supabase SQL Editor:\nALTER TABLE products DISABLE ROW LEVEL SECURITY;');}
 };
 window.mapSkuToProduct=async function(stockId,productId){
     try{await db.from('stock').update({product_id:productId?parseInt(productId):null}).eq('id',stockId);await loadStock();renderDashboard();}catch(err){setStatus('❌ '+err.message,'error');}
