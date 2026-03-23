@@ -1244,10 +1244,51 @@ window.handleFileUpload=async function(input){
             allOrders=mergedOrders;
             console.log('After merge: '+allOrders.length+' unique orders ('+mergedCount+' rows merged for affiliate fees/claims)');
 
-            statusDiv.innerHTML='<div class="alert alert-info">Parsed <b>'+allOrders.length+'</b> unique orders ('+mergedCount+' fee/adjustment rows merged). Uploading...</div>';
+            statusDiv.innerHTML='<div class="alert alert-info">Parsed <b>'+allOrders.length+'</b> unique orders ('+mergedCount+' fee/adjustment rows merged). Checking DB...</div>';
             console.log('Parsed:',allOrders.length,'Merged:',mergedCount);
 
-            // Step 2: Upsert ALL orders in batches (insert new + update existing)
+            // Step 2: Merge with existing DB data (handles orders split across files)
+            var existingMap={};
+            for(var eb=0;eb<allOrders.length;eb+=100){
+                var oids=allOrders.slice(eb,eb+100).map(function(o){return o.order_id;});
+                try{
+                    var er=await db.from('orders').select('order_id,received,status,items,remark,size,state').in('order_id',oids);
+                    if(er.data)er.data.forEach(function(e){existingMap[e.order_id]=e;});
+                }catch(e){}
+            }
+            var mergedWithDb=0;
+            allOrders.forEach(function(o){
+                var ex=existingMap[o.order_id];
+                if(ex){
+                    // Order exists in DB — this file has additional data (e.g. affiliate fee)
+                    // If file row has no real status but DB has one, keep DB status
+                    if(o.status==='Pending'&&ex.status&&ex.status!=='Pending')o.status=ex.status;
+                    // If file has a real status but DB doesn't, keep file status (already set)
+                    // Merge received: if signs differ, add them (main payment + fee deduction)
+                    if(ex.received!==0&&o.received!==ex.received){
+                        // Check if this looks like a fee row (no status, small negative amount)
+                        if(o.status==='Pending'&&o.received<0&&o.received>-50&&ex.received>0){
+                            // This is a fee row for an existing order — add to existing
+                            o.received=Math.round((ex.received+o.received)*100)/100;
+                            mergedWithDb++;
+                        } else if(ex.status==='Pending'&&ex.received<0&&ex.received>-50&&o.received>0){
+                            // DB has fee, file has main payment — add
+                            o.received=Math.round((ex.received+o.received)*100)/100;
+                            mergedWithDb++;
+                        }
+                    }
+                    // Keep best data
+                    if(!o.items&&ex.items)o.items=ex.items;
+                    if(!o.remark&&ex.remark)o.remark=ex.remark;
+                    if(!o.size&&ex.size)o.size=ex.size;
+                    if(!o.state&&ex.state)o.state=ex.state;
+                }
+            });
+            console.log('Merged with DB:',mergedWithDb,'orders');
+
+            statusDiv.innerHTML='<div class="alert alert-info">Uploading <b>'+allOrders.length+'</b> orders'+(mergedWithDb>0?' ('+mergedWithDb+' merged with existing)':'')+'...</div>';
+
+            // Step 3: Upsert ALL orders in batches (insert new + update existing)
             var BATCH=10;
             for(var b=0;b<allOrders.length;b+=BATCH){
                 var batch=allOrders.slice(b,b+BATCH);
@@ -1388,12 +1429,13 @@ window.addProduct=async function(){
     var name=document.getElementById('p-name').value.trim();
     var cost=parseFloat(document.getElementById('p-cost').value)||0;
     if(!name){alert('Enter product name');return;}
+    setStatus('Adding product...','syncing');
     try{
         var res=await db.from('products').insert({name:name,cost:cost});
         if(res.error)throw new Error(res.error.message);
         document.getElementById('p-name').value='';document.getElementById('p-cost').value='';
         await loadProducts();setStatus('✅ Product added');
-    }catch(err){setStatus('❌ '+err.message,'error');}
+    }catch(err){setStatus('❌ '+err.message,'error');alert('Error adding product: '+err.message);}
 };
 window.delProduct=async function(id){
     if(!confirm('Delete this product? SKUs mapped to it will become unmapped.'))return;
@@ -1405,7 +1447,14 @@ window.delProduct=async function(id){
     }catch(err){setStatus('❌ '+err.message,'error');}
 };
 window.updateProductCost=async function(id,val){
-    try{await db.from('products').update({cost:parseFloat(val)||0}).eq('id',id);await loadProducts();setStatus('✅ Cost updated');}catch(err){setStatus('❌ '+err.message,'error');}
+    try{
+        var res=await db.from('products').update({cost:parseFloat(val)||0}).eq('id',id);
+        if(res.error)throw new Error(res.error.message);
+        // Update local data without full re-render
+        productsData.forEach(function(p){if(p.id===id)p.cost=parseFloat(val)||0;});
+        renderDashboard();
+        setStatus('✅ Cost updated');
+    }catch(err){setStatus('❌ '+err.message,'error');alert('Error updating cost: '+err.message);}
 };
 window.mapSkuToProduct=async function(stockId,productId){
     try{await db.from('stock').update({product_id:productId?parseInt(productId):null}).eq('id',stockId);await loadStock();renderDashboard();}catch(err){setStatus('❌ '+err.message,'error');}
@@ -1440,7 +1489,7 @@ function renderProducts(){
         var st=prodStats[p.id]||{skus:0,sold:0,received:0};
         html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:0.5rem">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#92400e">'+p.name+'</b><button class="act-btn del" onclick="delProduct('+p.id+')" style="font-size:0.6rem">🗑️</button></div>';
-        html+='<div style="margin-top:0.3rem"><span style="font-size:0.65rem;color:#6b7280">Cost: </span><input type="number" value="'+p.cost+'" onchange="updateProductCost('+p.id+',this.value)" style="width:60px;padding:0.1rem 0.3rem;border:1px solid #fcd34d;border-radius:4px;font-size:0.7rem" min="0" step="0.01"></div>';
+        html+='<div style="margin-top:0.3rem"><span style="font-size:0.65rem;color:#6b7280">Cost: </span><input type="number" value="'+(p.cost||0)+'" onchange="updateProductCost('+p.id+',this.value)" style="width:60px;padding:0.1rem 0.3rem;border:1px solid #fcd34d;border-radius:4px;font-size:0.7rem" min="0" step="0.01"></div>';
         html+='<div style="display:flex;gap:0.5rem;margin-top:0.3rem;font-size:0.6rem;color:#78716c"><span>📦 '+st.skus+' SKUs</span><span>🛒 '+st.sold+' sold</span><span style="color:#059669">₹'+Math.round(st.received).toLocaleString()+'</span></div>';
         html+='</div>';
     });
@@ -1739,18 +1788,23 @@ function renderDashboard(){
             totalShipped+=qty;
             if(costMap[sku]>0){productCost+=qty*costMap[sku];hasCost=true;}
         });
-        // Only count cost for delivered (net cost to uncle)
-        var deliveredCost=0;
+        // Uncle cost = (Shipped - Returns) per SKU × cost
+        var uncleCost=0;
         Object.values(skuProfit).forEach(function(sp){
-            if(sp.cost>0)deliveredCost+=sp.delivered*sp.cost;
+            if(sp.cost>0){
+                var boughtFromUncle=sp.shipped-(sp.rto+sp.returned);
+                if(boughtFromUncle>0)uncleCost+=boughtFromUncle*sp.cost;
+            }
         });
+        var totalReturnsAll=totalRto+totalReturned;
+        var uncleBought=totalShipped-totalReturnsAll;
         var totalExpenses=expensesData.reduce(function(s,e){return s+(e.amount||0);},0);
-        var netProfit=recv-deliveredCost-totalExpenses;
+        var netProfit=recv-uncleCost-totalExpenses;
 
         var ph='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.5rem;font-size:0.75rem">';
         // Row 1: Money flow
         ph+='<div style="background:#d1fae5;padding:0.5rem;border-radius:8px;text-align:center"><div style="font-size:0.6rem;color:#065f46">Meesho Received</div><div style="font-weight:700;color:#059669;font-size:1rem">₹'+Math.round(recv).toLocaleString()+'</div></div>';
-        ph+='<div style="background:#fee2e2;padding:0.5rem;border-radius:8px;text-align:center"><div style="font-size:0.6rem;color:#991b1b">Product Cost'+(hasCost?'':'<br>(add Products &amp; map SKUs)')+'</div><div style="font-weight:700;color:#dc2626;font-size:1rem">₹'+Math.round(deliveredCost).toLocaleString()+'</div></div>';
+        ph+='<div style="background:#fee2e2;padding:0.5rem;border-radius:8px;text-align:center"><div style="font-size:0.6rem;color:#991b1b">Uncle Cost'+(hasCost?'':'<br>(add Products &amp; map SKUs)')+'</div><div style="font-weight:700;color:#dc2626;font-size:1rem">₹'+Math.round(uncleCost).toLocaleString()+'</div></div>';
         ph+='<div style="background:#fef3c7;padding:0.5rem;border-radius:8px;text-align:center"><div style="font-size:0.6rem;color:#92400e">Expenses</div><div style="font-weight:700;color:#d97706;font-size:1rem">₹'+Math.round(totalExpenses).toLocaleString()+'</div></div>';
         var profitColor=netProfit>=0?'#059669':'#dc2626';
         var profitBg=netProfit>=0?'#d1fae5':'#fee2e2';
@@ -1759,17 +1813,14 @@ function renderDashboard(){
         // Row 2: Units
         ph+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:0.4rem;margin-top:0.5rem;font-size:0.7rem">';
         ph+='<div style="background:#eff6ff;padding:0.4rem;border-radius:6px;text-align:center"><div style="font-size:0.55rem;color:#1d4ed8">Total Shipped</div><div style="font-weight:700;color:#2563eb">'+totalShipped+' units</div></div>';
-        ph+='<div style="background:#d1fae5;padding:0.4rem;border-radius:6px;text-align:center"><div style="font-size:0.55rem;color:#065f46">Delivered (Sold)</div><div style="font-weight:700;color:#059669">'+totalDelivered+' units</div></div>';
-        ph+='<div style="background:#fee2e2;padding:0.4rem;border-radius:6px;text-align:center"><div style="font-size:0.55rem;color:#991b1b">RTO (Back)</div><div style="font-weight:700;color:#dc2626">'+totalRto+' units</div></div>';
-        ph+='<div style="background:#fef3c7;padding:0.4rem;border-radius:6px;text-align:center"><div style="font-size:0.55rem;color:#92400e">Returned (Back)</div><div style="font-weight:700;color:#d97706">'+totalReturned+' units</div></div>';
-        ph+='<div style="background:#ede9fe;padding:0.4rem;border-radius:6px;text-align:center"><div style="font-size:0.55rem;color:#6d28d9">Products In Hand</div><div style="font-weight:700;color:#8b5cf6">'+(totalRto+totalReturned)+' units</div></div>';
+        ph+='<div style="background:#d1fae5;padding:0.4rem;border-radius:6px;text-align:center"><div style="font-size:0.55rem;color:#065f46">Delivered</div><div style="font-weight:700;color:#059669">'+totalDelivered+' units</div></div>';
+        ph+='<div style="background:#fee2e2;padding:0.4rem;border-radius:6px;text-align:center"><div style="font-size:0.55rem;color:#991b1b">RTO + Return</div><div style="font-weight:700;color:#dc2626">'+totalReturnsAll+' (reused)</div></div>';
+        ph+='<div style="background:#faf5ff;padding:0.4rem;border-radius:6px;text-align:center;border:2px solid #e9d5ff"><div style="font-size:0.55rem;color:#7c3aed">Bought from Uncle</div><div style="font-weight:700;color:#7c3aed">'+uncleBought+' units</div></div>';
         ph+='</div>';
         // Uncle payment note
         if(hasCost){
-            var unclePay=productCost;
             ph+='<div style="margin-top:0.5rem;background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:0.5rem;font-size:0.7rem">';
-            ph+='<b style="color:#7c3aed">🏪 Uncle Payment:</b> You shipped <b>'+totalShipped+'</b> units (total cost ₹'+Math.round(productCost).toLocaleString()+'). ';
-            ph+='<b>'+(totalRto+totalReturned)+'</b> came back. Net delivered = <b>'+totalDelivered+'</b> units = <b style="color:#dc2626">₹'+Math.round(deliveredCost).toLocaleString()+'</b> to pay uncle.';
+            ph+='<b style="color:#7c3aed">🏪 Uncle Payment:</b> Shipped <b>'+totalShipped+'</b> - Returns <b>'+totalReturnsAll+'</b> (reused) = <b>'+uncleBought+'</b> bought from uncle = <b style="color:#dc2626">₹'+Math.round(uncleCost).toLocaleString()+'</b>';
             ph+='</div>';
         } else {
             ph+='<div style="margin-top:0.5rem;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:0.5rem;font-size:0.65rem;color:#92400e">';
