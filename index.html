@@ -801,7 +801,10 @@ function buildCardDetails(upload){
     var dupLabels=all.filter(function(l){return l.isDuplicate;});
     var html='';
     var packCounts={};var allCounts={};
-    CATEGORIES.forEach(function(c){packCounts[c]={count:0,skus:[],sizes:{}};allCounts[c]={total:0,newC:0,dupC:0};});
+    // Include ALL categories (default + custom from SKU mappings)
+    var allCats=CATEGORIES.slice();
+    skuData.forEach(function(s){if(allCats.indexOf(s.category)===-1)allCats.push(s.category);});
+    allCats.forEach(function(c){packCounts[c]={count:0,skus:[],sizes:{}};allCounts[c]={total:0,newC:0,dupC:0};});
     packCounts['Uncategorized']={count:0,skus:[],sizes:{}};allCounts['Uncategorized']={total:0,newC:0,dupC:0};
     var unmapped=[];
     all.forEach(function(l){
@@ -831,7 +834,7 @@ function buildCardDetails(upload){
     html+='</div>';
     if(totalPack>0){
         html+='<div class="count-grid" style="margin:0">';
-        CATEGORIES.concat(['Uncategorized']).forEach(function(cat){
+        allCats.concat(['Uncategorized']).forEach(function(cat){
             var d=packCounts[cat];if(!d||d.count===0)return;
             var bc='#10b981';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
             html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+cat+'</div><div class="cc-count" style="color:'+bc+'">'+d.count+'</div>';
@@ -873,7 +876,7 @@ function buildCardDetails(upload){
     }
     html+='<details style="margin-bottom:0.75rem"><summary style="cursor:pointer;font-weight:600;font-size:0.8rem;color:#92400e;padding:0.5rem 0">📊 Full Breakdown (All '+all.length+' labels)</summary>';
     html+='<div class="count-grid" style="margin-top:0.5rem">';
-    CATEGORIES.concat(['Uncategorized']).forEach(function(cat){
+    allCats.concat(['Uncategorized']).forEach(function(cat){
         var d=allCounts[cat];if(!d||d.total===0)return;
         var bc='#f59e0b';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
         html+='<div class="count-card" style="border-left-color:'+bc+'"><div class="cc-label">'+cat+'</div><div class="cc-count">'+d.total+'</div>';
