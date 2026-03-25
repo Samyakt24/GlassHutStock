@@ -565,7 +565,7 @@ async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('
 async function loadScanHistory(){try{var r=await db.from('scan_history').select('*');if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){scanHistory=[];return true;}throw new Error(r.error.message);}scanHistory=r.data||[];return true;}catch(err){scanHistory=[];return true;}}
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
 async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
-async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();return true;}catch(err){inventoryData=[];return true;}}
+async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();renderProducts();return true;}catch(err){inventoryData=[];return true;}}
 async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();if(s&&o)setStatus('✅ Connected');}
 
 // SKU CRUD
@@ -599,6 +599,34 @@ function refreshCategoryDropdown(){
 }
 window.addSku=addSku;
 window.deleteSku=async function(id){if(!confirm('Remove this SKU?'))return;try{await db.from('sku_map').delete().eq('id',id);await loadSkus();setStatus('✅ SKU removed');}catch(err){setStatus('❌ '+err.message,'error');}};
+window.editCategory=async function(oldName){
+    var newName=prompt('Rename category "'+oldName+'" to:',oldName);
+    if(!newName||newName.trim()===oldName)return;
+    newName=newName.trim();
+    var items=skuData.filter(function(s){return s.category===oldName;});
+    if(items.length===0)return;
+    setStatus('Renaming '+items.length+' SKUs...','syncing');
+    var updated=0;
+    for(var i=0;i<items.length;i++){
+        try{
+            var res=await db.from('sku_map').update({category:newName}).eq('id',items[i].id);
+            if(!res.error)updated++;
+        }catch(e){}
+    }
+    await loadSkus();
+    setStatus('✅ Renamed '+updated+' SKUs from "'+oldName+'" to "'+newName+'"');
+};
+window.deleteCategory=async function(catName){
+    var items=skuData.filter(function(s){return s.category===catName;});
+    if(!confirm('Delete category "'+catName+'" and all '+items.length+' SKU mappings?\n\nThis cannot be undone.'))return;
+    setStatus('Deleting...','syncing');
+    var deleted=0;
+    for(var i=0;i<items.length;i++){
+        try{await db.from('sku_map').delete().eq('id',items[i].id);deleted++;}catch(e){}
+    }
+    await loadSkus();
+    setStatus('✅ Deleted category "'+catName+'" ('+deleted+' SKUs)');
+};
 window.quickAssignSku=async function(skuName){
     var el=document.querySelector('[data-assign-sku="'+CSS.escape(skuName)+'"]');if(!el)return;
     var cat=el.value;if(!cat){alert('Select category first');return;}
@@ -610,7 +638,6 @@ function renderSkus(){
     document.getElementById('skuCnt').textContent=skuData.length;
     var c=document.getElementById('skuContainer');
     if(skuData.length===0){c.innerHTML='<div class="empty">No SKU mappings yet.</div>';refreshCategoryDropdown();return;}
-    // Collect all categories (default + custom)
     var allCats=CATEGORIES.slice();
     skuData.forEach(function(s){if(allCats.indexOf(s.category)===-1)allCats.push(s.category);});
     var grouped={};
@@ -619,9 +646,16 @@ function renderSkus(){
     var html='';
     allCats.forEach(function(cat){
         var items=grouped[cat]||[];
-        if(items.length===0&&CATEGORIES.indexOf(cat)===-1)return; // hide empty custom categories
+        if(items.length===0&&CATEGORIES.indexOf(cat)===-1)return;
         var chipClass=CAT_COLORS[cat]||'cat-uncategorized';
-        html+='<div class="cat-section"><div class="cat-section-head"><h5><span class="cat-chip '+chipClass+'">'+cat+'</span> <span style="font-size:0.75rem;color:#9ca3af">('+items.length+')</span></h5></div><div class="sku-list">';
+        html+='<div class="cat-section"><div class="cat-section-head" style="display:flex;justify-content:space-between;align-items:center"><h5><span class="cat-chip '+chipClass+'">'+cat+'</span> <span style="font-size:0.75rem;color:#9ca3af">('+items.length+')</span></h5>';
+        if(items.length>0){
+            html+='<div style="display:flex;gap:0.3rem">';
+            html+='<button onclick="editCategory(\''+escapeHtml(cat).replace(/'/g,"\\'")+'\')" style="font-size:0.55rem;padding:0.15rem 0.4rem;border:1px solid #fcd34d;border-radius:4px;background:#fffbeb;cursor:pointer;color:#92400e">✏️ Rename</button>';
+            html+='<button onclick="deleteCategory(\''+escapeHtml(cat).replace(/'/g,"\\'")+'\')" style="font-size:0.55rem;padding:0.15rem 0.4rem;border:1px solid #fca5a5;border-radius:4px;background:#fef2f2;cursor:pointer;color:#dc2626">🗑️ Delete All</button>';
+            html+='</div>';
+        }
+        html+='</div><div class="sku-list">';
         if(items.length===0){html+='<span style="font-size:0.7rem;color:#d1d5db;padding:0.25rem">No SKUs</span>';}
         else{items.forEach(function(s){html+='<span class="sku-tag">'+escapeHtml(s.sku_name)+' <button class="remove-sku" onclick="deleteSku('+s.id+')" title="Remove">×</button></span>';});}
         html+='</div></div>';
@@ -1487,7 +1521,7 @@ function renderProducts(){
     productsData.forEach(function(p){
         // Count SKUs mapped to this category
         var skuCount=skuData.filter(function(s){return s.category.toLowerCase().trim()===p.name.toLowerCase().trim();}).length;
-        var invTotal=inventoryData.filter(function(i){return i.product_id===p.id;}).reduce(function(s,i){return s+i.qty;},0);
+        var invTotal=inventoryData.filter(function(i){return parseInt(i.product_id)===parseInt(p.id);}).reduce(function(s,i){return s+i.qty;},0);
         var isLow=invTotal>0&&invTotal<=20;
         html+='<div style="background:'+(isLow?'#fef2f2':'#fffbeb')+';border:1px solid '+(isLow?'#fca5a5':'#fde68a')+';border-radius:10px;padding:0.5rem">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#92400e">'+p.name+'</b><button class="act-btn del" onclick="delProduct('+p.id+')" style="font-size:0.6rem">🗑️</button></div>';
@@ -1573,7 +1607,7 @@ window.confirmDispatch=async function(){
         var d=deductions[key];
         var prodName=productsData.find(function(p){return p.id===d.product_id;});
         var name=prodName?prodName.name:'Unknown';
-        var inv=inventoryData.find(function(i){return i.product_id===d.product_id&&i.size===d.size;});
+        var inv=inventoryData.find(function(i){return parseInt(i.product_id)===parseInt(d.product_id)&&i.size===d.size;});
         var available=inv?inv.qty:0;
         var shortage=available<d.qty;
         html+='<tr style="border-bottom:1px solid #fef3c7'+(shortage?';background:#fef2f2':'')+'">';
@@ -1610,7 +1644,7 @@ window.executeDispatch=async function(){
         if(actualQty<=0)continue;
         total+=actualQty;
         var d=pendingDeductions[input.dataset.key];
-        var inv=inventoryData.find(function(i){return i.product_id===d.product_id&&i.size===d.size;});
+        var inv=inventoryData.find(function(i){return parseInt(i.product_id)===parseInt(d.product_id)&&i.size===d.size;});
         try{
             if(inv){
                 await db.from('inventory').update({qty:inv.qty-actualQty}).eq('id',inv.id);
@@ -1645,13 +1679,14 @@ function renderInventory(){
     // Group by product
     var grouped={};
     inventoryData.forEach(function(inv){
-        if(!grouped[inv.product_id])grouped[inv.product_id]={items:[],total:0};
-        grouped[inv.product_id].items.push(inv);
-        grouped[inv.product_id].total+=inv.qty;
+        var pid=parseInt(inv.product_id);
+        if(!grouped[pid])grouped[pid]={items:[],total:0};
+        grouped[pid].items.push(inv);
+        grouped[pid].total+=inv.qty;
     });
     var html='';
     productsData.forEach(function(p){
-        var g=grouped[p.id];
+        var g=grouped[parseInt(p.id)];
         if(!g)return;
         g.items.sort(function(a,b){return parseFloat(a.size)-parseFloat(b.size);});
         var isLow=g.items.some(function(i){return i.qty>0&&i.qty<=10;});
