@@ -103,7 +103,7 @@
         .badge-delivered { background: #d1fae5; color: #065f46; }
         .badge-rto { background: #fee2e2; color: #991b1b; }
         .badge-pending { background: #faf7f0; color: #8b6914; }
-        .badge-return { background: #fef3c7; color: #b45309; }
+        .badge-return { background: #faf7f0; color: #b45309; }
         .badge-exchange { background: #ede9fe; color: #6d28d9; }
         .badge-shipped { background: #e0f2fe; color: #075985; }
         .badge-new { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
@@ -223,7 +223,7 @@
         .month-stat .ms-label { font-size: 0.65rem; color: #6b7280; }
         .month-stat .ms-val { font-size: 1.3rem; font-weight: 700; }
         .plat-breakdown { margin-top: 0.75rem; }
-        .plat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border-bottom: 1px solid #fef3c7; font-size: 0.8rem; }
+        .plat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e2e8f0; font-size: 0.8rem; }
         .plat-row:last-child { border-bottom: none; }
         .plat-row .plat-name { font-weight: 600; }
         .plat-row .plat-nums { display: flex; gap: 1rem; font-size: 0.7rem; }
@@ -1596,7 +1596,7 @@ window.confirmDispatch=async function(){
     });
     pendingDeductions=deductions;
     // Show editable dispatch form
-    var html='<div style="background:#f8f9fd;border:2px solid #c5cfe0;border-radius:12px;padding:1rem;margin-top:0.5rem">';
+    var html='<div id="dispatchForm" style="background:#f8f9fd;border:2px solid #c5cfe0;border-radius:12px;padding:1rem;margin-top:0.5rem">';
     html+='<div style="font-weight:700;font-size:0.9rem;color:#1e3a5f;margin-bottom:0.5rem">📦 Dispatch — Edit quantities before confirming</div>';
     if(unmappedSkus.length>0){
         html+='<div style="background:#edf2f9;padding:0.4rem;border-radius:6px;font-size:0.65rem;color:#1e3a5f;margin-bottom:0.5rem">⚠️ Unmapped: '+unmappedSkus.join(', ')+'</div>';
@@ -1627,10 +1627,8 @@ window.confirmDispatch=async function(){
 };
 window.cancelDispatch=function(){
     pendingDeductions=null;
-    // Remove dispatch form
-    var status=document.getElementById('pdfStatus');
-    var forms=status.querySelectorAll('div[style*="fffbeb"]');
-    if(forms.length>0)forms[forms.length-1].remove();
+    var form=document.getElementById('dispatchForm');
+    if(form)form.remove();
 };
 window.executeDispatch=async function(){
     if(!pendingDeductions)return;
@@ -1659,9 +1657,8 @@ window.executeDispatch=async function(){
     await loadInventory();
     setStatus('✅ Dispatched! '+total+' products deducted from '+updated+' entries');
     // Remove dispatch form
-    var status=document.getElementById('pdfStatus');
-    var forms=status.querySelectorAll('div[style*="fffbeb"]');
-    if(forms.length>0)forms[forms.length-1].remove();
+    var form=document.getElementById('dispatchForm');
+    if(form)form.remove();
     document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-success" style="margin-top:0.3rem;font-size:0.7rem">✅ Stock deducted: '+total+' products dispatched</div>';
 };
 function renderInventory(){
