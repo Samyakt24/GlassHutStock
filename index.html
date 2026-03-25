@@ -1490,66 +1490,15 @@ function renderProducts(){
     var el=document.getElementById('productsList');
     if(!el)return;
     if(productsData.length===0){el.innerHTML='<div class="empty" style="font-size:0.7rem">No products yet. Add your first product above.</div>';return;}
-    // Build detailed stats per product
-    var prodStats={};
-    productsData.forEach(function(p){prodStats[p.id]={skus:0,shipped:0,delivered:0,rto:0,returned:0,exchange:0,received:0};});
-    // Map stock to product
-    var skuToProduct={};
-    stockData.forEach(function(s){
-        if(s.product_id){
-            skuToProduct[s.name.trim().toLowerCase()]=s.product_id;
-            if(prodStats[s.product_id])prodStats[s.product_id].skus++;
-        }
-    });
-    // Count order stats per product
-    ordersData.forEach(function(o){
-        var sku=(o.remark||'').trim().toLowerCase();
-        if(!sku)return;
-        var pid=skuToProduct[sku];
-        if(!pid||!prodStats[pid])return;
-        var ps=prodStats[pid];
-        var qty=o.qty||1;
-        ps.shipped+=qty;
-        ps.received+=o.received||0;
-        if(o.status==='Delivered')ps.delivered+=qty;
-        else if(o.status==='RTO')ps.rto+=qty;
-        else if(o.status==='Return')ps.returned+=qty;
-        else if(o.status==='Exchange')ps.exchange+=qty;
-    });
-    var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:0.5rem">';
+    var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.5rem">';
     productsData.forEach(function(p){
-        var st=prodStats[p.id]||{skus:0,shipped:0,delivered:0,rto:0,returned:0,exchange:0,received:0};
-        var cost=p.cost||0;
-        var reused=st.rto+st.returned+st.exchange;
-        var uncleBought=st.shipped-reused;
-        var uncleCost=uncleBought*cost;
-        var profit=Math.round(st.received-uncleCost);
-        var profitColor=profit>=0?'#059669':'#dc2626';
-        html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:0.6rem">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.85rem;color:#92400e">'+p.name+'</b><button class="act-btn del" onclick="delProduct('+p.id+')" style="font-size:0.6rem">🗑️</button></div>';
-        html+='<div style="margin-top:0.3rem"><span style="font-size:0.65rem;color:#6b7280">Cost: ₹</span><input type="number" value="'+(cost||0)+'" onchange="updateProductCost('+p.id+',this.value)" style="width:60px;padding:0.1rem 0.3rem;border:1px solid #fcd34d;border-radius:4px;font-size:0.7rem" min="0" step="0.01"></div>';
-        // Units row
-        html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.4rem;font-size:0.55rem">';
-        html+='<span style="background:#eff6ff;padding:0.1rem 0.3rem;border-radius:4px">📦 Ship:'+st.shipped+'</span>';
-        html+='<span style="background:#d1fae5;padding:0.1rem 0.3rem;border-radius:4px">✅ Del:'+st.delivered+'</span>';
-        if(st.rto>0)html+='<span style="background:#fee2e2;padding:0.1rem 0.3rem;border-radius:4px">📦 RTO:'+st.rto+'</span>';
-        if(st.returned>0)html+='<span style="background:#fef3c7;padding:0.1rem 0.3rem;border-radius:4px">↩️ Ret:'+st.returned+'</span>';
-        if(st.exchange>0)html+='<span style="background:#ede9fe;padding:0.1rem 0.3rem;border-radius:4px">🔄 Exc:'+st.exchange+'</span>';
-        html+='</div>';
-        // Money row
-        if(cost>0){
-            html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.3rem;margin-top:0.4rem;font-size:0.6rem">';
-            html+='<div style="background:#d1fae5;padding:0.2rem 0.3rem;border-radius:4px;text-align:center"><div style="font-size:0.5rem;color:#065f46">Received</div><b style="color:#059669">₹'+Math.round(st.received).toLocaleString()+'</b></div>';
-            html+='<div style="background:#fee2e2;padding:0.2rem 0.3rem;border-radius:4px;text-align:center"><div style="font-size:0.5rem;color:#991b1b">Uncle Cost</div><b style="color:#dc2626">₹'+Math.round(uncleCost).toLocaleString()+'</b></div>';
-            html+='</div>';
-            html+='<div style="background:'+(profit>=0?'#d1fae5':'#fee2e2')+';padding:0.3rem;border-radius:6px;text-align:center;margin-top:0.3rem;border:1px solid '+(profit>=0?'#6ee7b7':'#fca5a5')+'">';
-            html+='<span style="font-size:0.5rem;color:'+profitColor+'">Profit</span> <b style="color:'+profitColor+';font-size:0.85rem">₹'+profit.toLocaleString()+'</b>';
-            html+='</div>';
-            html+='<div style="font-size:0.5rem;color:#6b7280;margin-top:0.2rem;text-align:center">Uncle: '+uncleBought+' bought ('+st.shipped+' shipped - '+reused+' reused)</div>';
-        } else {
-            html+='<div style="display:flex;gap:0.5rem;margin-top:0.3rem;font-size:0.6rem;color:#78716c"><span>📦 '+st.skus+' SKUs</span><span style="color:#059669">₹'+Math.round(st.received).toLocaleString()+' received</span></div>';
-            html+='<div style="font-size:0.5rem;color:#92400e;margin-top:0.2rem">💡 Add cost to see profit</div>';
-        }
+        var skuCount=stockData.filter(function(s){return s.product_id===p.id;}).length;
+        // Count total inventory for this product
+        var invTotal=inventoryData.filter(function(i){return i.product_id===p.id;}).reduce(function(s,i){return s+i.qty;},0);
+        html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:0.5rem">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#92400e">'+p.name+'</b><button class="act-btn del" onclick="delProduct('+p.id+')" style="font-size:0.6rem">🗑️</button></div>';
+        html+='<div style="margin-top:0.3rem"><span style="font-size:0.65rem;color:#6b7280">Cost: ₹</span><input type="number" value="'+(p.cost||0)+'" onchange="updateProductCost('+p.id+',this.value)" style="width:60px;padding:0.1rem 0.3rem;border:1px solid #fcd34d;border-radius:4px;font-size:0.7rem" min="0" step="0.01"></div>';
+        html+='<div style="display:flex;gap:0.5rem;margin-top:0.3rem;font-size:0.6rem;color:#78716c"><span>📦 '+skuCount+' SKUs</span><span style="color:'+(invTotal>0?'#059669':'#6b7280')+'">🏪 Stock: '+invTotal+'</span></div>';
         html+='</div>';
     });
     html+='</div>';
