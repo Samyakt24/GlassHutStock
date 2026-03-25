@@ -325,6 +325,17 @@
                     <div id="productsList" style="margin-top:0.5rem"></div>
                 </div>
                 <div class="form-box">
+                    <h4>📊 Inventory (Stock per Size)</h4>
+                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Track how many pieces you have per product per size.</p>
+                    <div class="form-row">
+                        <div class="form-grp"><label>Product *</label><select id="inv-product"><option value="">-- Select --</option></select></div>
+                        <div class="form-grp" style="max-width:100px"><label>Size *</label><select id="inv-size"><option>2.0</option><option>2.1</option><option>2.2</option><option>2.3</option><option selected>2.4</option><option>2.5</option><option>2.6</option><option>2.7</option><option>2.8</option><option>2.9</option><option>2.10</option><option>2.11</option><option>2.12</option></select></div>
+                        <div class="form-grp" style="max-width:80px"><label>Qty *</label><input type="number" id="inv-qty" min="0" placeholder="50"></div>
+                        <div class="form-grp" style="align-self:flex-end"><button class="btn btn-primary" onclick="addInventory()">➕ Add</button></div>
+                    </div>
+                    <div id="inventoryList" style="margin-top:0.5rem"></div>
+                </div>
+                <div class="form-box">
                     <h4>📦 SKUs (Meesho listings)</h4>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
                         <p style="font-size:0.7rem;color:#6b7280;margin:0">Assign each SKU to a product to track cost & profit.</p>
@@ -534,7 +545,7 @@ const CATEGORIES=['Light Multi 24','Light Multi 12','Dark Multi 24','Dark Multi 
 const CAT_COLORS={'Light Multi 24':'cat-light24','Light Multi 12':'cat-light12','Dark Multi 24':'cat-dark24','Dark Multi 12':'cat-dark12','GOLD Multi 24':'cat-gold24','Uncategorized':'cat-uncategorized'};
 const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[];
+let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[];
 let platform='meesho',filterPlat='all',filterStatus='all',currentUser=null;
 let openMonthKey=null;
 
@@ -570,7 +581,8 @@ async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('
 async function loadScanHistory(){try{var r=await db.from('scan_history').select('*');if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){scanHistory=[];return true;}throw new Error(r.error.message);}scanHistory=r.data||[];return true;}catch(err){scanHistory=[];return true;}}
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
 async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
-async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();if(s&&o)setStatus('✅ Connected');}
+async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();return true;}catch(err){inventoryData=[];return true;}}
+async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();if(s&&o)setStatus('✅ Connected');}
 
 // SKU CRUD
 async function addSku(){
@@ -692,7 +704,7 @@ window.handlePdfUpload=async function(input){
         await loadPdfHistory();
         if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
         renderPdfHistory();
-        statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (SKU → Size → Qty)</button></div>';
+        statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (SKU → Size → Qty)</button> <button class="btn btn-success btn-sm" onclick="confirmDispatch()" style="margin-top:0.5rem;font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button></div>';
         setStatus('✅ PDF parsed!');input.value='';
     }catch(err){statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';setStatus('❌ PDF error','error');input.value='';}
 };
@@ -1541,6 +1553,174 @@ function renderProducts(){
         html+='</div>';
     });
     html+='</div>';
+    el.innerHTML=html;
+}
+
+// INVENTORY
+window.addInventory=async function(){
+    var pid=document.getElementById('inv-product').value;
+    var size=document.getElementById('inv-size').value;
+    var qty=parseInt(document.getElementById('inv-qty').value)||0;
+    if(!pid){alert('Select a product');return;}
+    if(!qty){alert('Enter quantity');return;}
+    // Check if exists
+    var existing=inventoryData.find(function(i){return i.product_id===parseInt(pid)&&i.size===size;});
+    try{
+        if(existing){
+            var newQty=existing.qty+qty;
+            var res=await db.from('inventory').update({qty:newQty}).eq('id',existing.id).select();
+            if(res.error)throw new Error(res.error.message);
+            setStatus('✅ Stock updated: +'+qty);
+        } else {
+            var res=await db.from('inventory').insert({product_id:parseInt(pid),size:size,qty:qty}).select();
+            if(res.error)throw new Error(res.error.message);
+            setStatus('✅ Stock added');
+        }
+        document.getElementById('inv-qty').value='';
+        await loadInventory();
+    }catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message);}
+};
+window.updateInventoryQty=async function(id,val){
+    try{
+        var res=await db.from('inventory').update({qty:parseInt(val)||0}).eq('id',id).select();
+        if(res.error)throw new Error(res.error.message);
+        inventoryData.forEach(function(i){if(i.id===id)i.qty=parseInt(val)||0;});
+        setStatus('✅ Updated');
+    }catch(err){setStatus('❌ '+err.message,'error');}
+};
+window.delInventory=async function(id){
+    if(!confirm('Delete this stock entry?'))return;
+    try{await db.from('inventory').delete().eq('id',id);await loadInventory();setStatus('✅ Deleted');}catch(err){setStatus('❌ '+err.message,'error');}
+};
+var pendingDeductions=null;
+window.confirmDispatch=async function(){
+    if(!lastPdfLabels){alert('Upload a label PDF first');return;}
+    var newLabels=lastPdfLabels.filter(function(l){return !l.isDuplicate;});
+    if(newLabels.length===0){alert('No new labels to dispatch');return;}
+    var skuToProduct={};
+    stockData.forEach(function(s){
+        if(s.product_id)skuToProduct[s.name.trim().toLowerCase()]=s.product_id;
+    });
+    var deductions={};
+    var unmappedSkus=[];
+    newLabels.forEach(function(l){
+        var sku=(l.sku||'').trim().toLowerCase();
+        var pid=skuToProduct[sku];
+        if(!pid){if(unmappedSkus.indexOf(l.sku)===-1)unmappedSkus.push(l.sku);return;}
+        var size=l.size||'-';
+        var qty=l.qty||1;
+        var key=pid+'|||'+size;
+        if(!deductions[key])deductions[key]={product_id:pid,size:size,qty:0};
+        deductions[key].qty+=qty;
+    });
+    pendingDeductions=deductions;
+    // Show editable dispatch form
+    var html='<div style="background:#fffbeb;border:2px solid #fde68a;border-radius:12px;padding:1rem;margin-top:0.5rem">';
+    html+='<div style="font-weight:700;font-size:0.9rem;color:#92400e;margin-bottom:0.5rem">📦 Dispatch — Edit quantities before confirming</div>';
+    if(unmappedSkus.length>0){
+        html+='<div style="background:#fef3c7;padding:0.4rem;border-radius:6px;font-size:0.65rem;color:#92400e;margin-bottom:0.5rem">⚠️ Unmapped: '+unmappedSkus.join(', ')+'</div>';
+    }
+    html+='<table style="width:100%;font-size:0.75rem"><thead><tr><th style="padding:0.3rem;border-bottom:2px solid #fcd34d">Product</th><th style="padding:0.3rem;border-bottom:2px solid #fcd34d">Size</th><th style="padding:0.3rem;border-bottom:2px solid #fcd34d;text-align:center">From Labels</th><th style="padding:0.3rem;border-bottom:2px solid #fcd34d;text-align:center">Dispatch</th><th style="padding:0.3rem;border-bottom:2px solid #fcd34d;text-align:center">In Stock</th></tr></thead><tbody>';
+    var keys=Object.keys(deductions).sort();
+    keys.forEach(function(key,idx){
+        var d=deductions[key];
+        var prodName=productsData.find(function(p){return p.id===d.product_id;});
+        var name=prodName?prodName.name:'Unknown';
+        var inv=inventoryData.find(function(i){return i.product_id===d.product_id&&i.size===d.size;});
+        var available=inv?inv.qty:0;
+        var shortage=available<d.qty;
+        html+='<tr style="border-bottom:1px solid #fef3c7'+(shortage?';background:#fef2f2':'')+'">';
+        html+='<td style="padding:0.3rem;font-weight:600">'+name+'</td>';
+        html+='<td style="padding:0.3rem;text-align:center">'+d.size+'"</td>';
+        html+='<td style="padding:0.3rem;text-align:center;color:#6b7280">'+d.qty+'</td>';
+        html+='<td style="padding:0.3rem;text-align:center"><input type="number" id="dispatch-'+idx+'" data-key="'+key+'" value="'+d.qty+'" min="0" max="9999" style="width:50px;text-align:center;border:2px solid '+(shortage?'#fca5a5':'#6ee7b7')+';border-radius:6px;font-weight:700;font-size:0.8rem;padding:0.2rem"></td>';
+        html+='<td style="padding:0.3rem;text-align:center;font-weight:600;color:'+(shortage?'#dc2626':'#059669')+'">'+available+'</td>';
+        html+='</tr>';
+    });
+    html+='</tbody></table>';
+    html+='<div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">';
+    html+='<button class="btn btn-outline btn-sm" onclick="cancelDispatch()" style="font-size:0.7rem">❌ Cancel</button>';
+    html+='<button class="btn btn-success btn-sm" onclick="executeDispatch()" style="font-size:0.7rem">✅ Confirm & Deduct Stock</button>';
+    html+='</div></div>';
+    document.getElementById('pdfStatus').innerHTML+=html;
+};
+window.cancelDispatch=function(){
+    pendingDeductions=null;
+    // Remove dispatch form
+    var status=document.getElementById('pdfStatus');
+    var forms=status.querySelectorAll('div[style*="fffbeb"]');
+    if(forms.length>0)forms[forms.length-1].remove();
+};
+window.executeDispatch=async function(){
+    if(!pendingDeductions)return;
+    var keys=Object.keys(pendingDeductions);
+    setStatus('Deducting stock...','syncing');
+    var updated=0,total=0;
+    for(var idx=0;idx<keys.length;idx++){
+        var input=document.getElementById('dispatch-'+idx);
+        if(!input)continue;
+        var actualQty=parseInt(input.value)||0;
+        if(actualQty<=0)continue;
+        total+=actualQty;
+        var d=pendingDeductions[input.dataset.key];
+        var inv=inventoryData.find(function(i){return i.product_id===d.product_id&&i.size===d.size;});
+        try{
+            if(inv){
+                await db.from('inventory').update({qty:inv.qty-actualQty}).eq('id',inv.id);
+                updated++;
+            } else {
+                await db.from('inventory').insert({product_id:d.product_id,size:d.size,qty:-actualQty});
+                updated++;
+            }
+        }catch(e){console.error('Deduct error:',e);}
+    }
+    pendingDeductions=null;
+    await loadInventory();
+    setStatus('✅ Dispatched! '+total+' products deducted from '+updated+' entries');
+    // Remove dispatch form
+    var status=document.getElementById('pdfStatus');
+    var forms=status.querySelectorAll('div[style*="fffbeb"]');
+    if(forms.length>0)forms[forms.length-1].remove();
+    document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-success" style="margin-top:0.3rem;font-size:0.7rem">✅ Stock deducted: '+total+' products dispatched</div>';
+};
+function renderInventory(){
+    var el=document.getElementById('inventoryList');
+    if(!el)return;
+    // Populate product dropdown
+    var sel=document.getElementById('inv-product');
+    if(sel){
+        var current=sel.value;
+        sel.innerHTML='<option value="">-- Select --</option>';
+        productsData.forEach(function(p){sel.innerHTML+='<option value="'+p.id+'">'+p.name+'</option>';});
+        if(current)sel.value=current;
+    }
+    if(inventoryData.length===0){el.innerHTML='<div class="empty" style="font-size:0.7rem">No inventory yet. Add stock above.</div>';return;}
+    // Group by product
+    var grouped={};
+    inventoryData.forEach(function(inv){
+        if(!grouped[inv.product_id])grouped[inv.product_id]={items:[],total:0};
+        grouped[inv.product_id].items.push(inv);
+        grouped[inv.product_id].total+=inv.qty;
+    });
+    var html='';
+    productsData.forEach(function(p){
+        var g=grouped[p.id];
+        if(!g)return;
+        g.items.sort(function(a,b){return parseFloat(a.size)-parseFloat(b.size);});
+        var isLow=g.items.some(function(i){return i.qty>0&&i.qty<=10;});
+        html+='<div style="background:'+(isLow?'#fef2f2':'#fffbeb')+';border:1px solid '+(isLow?'#fca5a5':'#fde68a')+';border-radius:10px;padding:0.5rem;margin-bottom:0.5rem">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#92400e">'+p.name+'</b><span style="font-size:0.7rem;font-weight:600;color:#d97706">Total: '+g.total+'</span></div>';
+        html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.3rem">';
+        g.items.forEach(function(inv){
+            var qtyColor=inv.qty<=0?'#dc2626':inv.qty<=10?'#d97706':'#059669';
+            html+='<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
+            html+='<div style="font-size:0.6rem;color:#6b7280">'+inv.size+'"</div>';
+            html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #fcd34d;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem" min="0">';
+            html+='<div style="margin-top:0.2rem"><button class="act-btn del" onclick="delInventory('+inv.id+')" style="font-size:0.5rem">🗑️</button></div>';
+            html+='</div>';
+        });
+        html+='</div></div>';
+    });
     el.innerHTML=html;
 }
 
