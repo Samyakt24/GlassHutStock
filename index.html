@@ -728,7 +728,42 @@ window.handlePdfUpload=async function(input){
             }
         }
         lastPdfLabels=labels;
+        lastPdfLabels._fileName=file.name;
         if(labels.length===0){statusDiv.innerHTML='<div class="alert alert-danger">❌ No labels found in "'+escapeHtml(file.name)+'".</div>';setStatus('❌ No labels','error');input.value='';return;}
+        // Ask: testing or real?
+        var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
+        var dp=labels.filter(function(l){return l.isDuplicate;}).length;
+        statusDiv.innerHTML='<div style="background:#f0f4ff;border:2px solid #c5cfe0;border-radius:12px;padding:1rem;text-align:center">'
+            +'<div style="font-size:1rem;font-weight:700;color:#1e3a5f;margin-bottom:0.5rem">📄 '+labels.length+' labels found — <span style="color:#059669">'+nw+' new</span>'+(dp>0?', <span style="color:#dc2626">'+dp+' duplicate</span>':'')+'</div>'
+            +'<div style="font-size:0.8rem;color:#6b7280;margin-bottom:0.75rem">Is this a test upload or real dispatch?</div>'
+            +'<div style="display:flex;gap:0.75rem;justify-content:center">'
+            +'<button class="btn" onclick="processPdfUpload(true)" style="padding:0.6rem 1.5rem;background:#e2e8f0;color:#1e3a5f;font-size:0.85rem">🧪 Just Testing</button>'
+            +'<button class="btn btn-primary" onclick="processPdfUpload(false)" style="padding:0.6rem 1.5rem;font-size:0.85rem">📦 Real Dispatch</button>'
+            +'</div></div>';
+        setStatus('Waiting...');
+        input.value='';
+    }catch(err){
+        statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';
+        setStatus('❌ Error','error');
+    }
+};
+window.processPdfUpload=async function(isTesting){
+    var statusDiv=document.getElementById('pdfStatus');
+    var labels=lastPdfLabels;
+    if(!labels||labels.length===0)return;
+    var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
+    var dp=labels.filter(function(l){return l.isDuplicate;}).length;
+    if(isTesting){
+        // Testing mode: just show count, no save, no dispatch
+        statusDiv.innerHTML='<div class="alert alert-info">🧪 <b>Test mode</b> — '+labels.length+' labels ('+nw+' new, '+dp+' duplicate). Nothing saved.<br>'
+            +'<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (preview only)</button></div>';
+        setStatus('🧪 Test mode');
+        return;
+    }
+    // Real mode: save to scan_history, show all options
+    statusDiv.innerHTML='<div class="alert alert-info">Saving labels...</div>';
+    setStatus('Saving...','syncing');
+    try{
         var newToSave=labels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
         if(newToSave.length>0){
             var today=new Date().toISOString().split('T')[0];
@@ -745,16 +780,17 @@ window.handlePdfUpload=async function(input){
             console.log('Saved '+savedCount+'/'+ins.length+' to scan_history');
             await loadScanHistory();
         }
-        var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
-        var dp=labels.filter(function(l){return l.isDuplicate;}).length;
-        var upload={name:file.name,labels:labels,newCount:nw,dupCount:dp};
+        var upload={name:(lastPdfLabels._fileName||'labels.pdf'),labels:labels,newCount:nw,dupCount:dp};
         await savePdfUpload(upload);
         await loadPdfHistory();
         if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
         renderPdfHistory();
         statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (SKU → Size → Qty)</button> <button class="btn btn-success btn-sm" onclick="confirmDispatch()" style="margin-top:0.5rem;font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button></div>';
-        setStatus('✅ PDF parsed!');input.value='';
-    }catch(err){statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';setStatus('❌ PDF error','error');input.value='';}
+        setStatus('✅ '+labels.length+' labels processed');
+    }catch(err){
+        statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';
+        setStatus('❌ Error','error');
+    }
 };
 
 window.downloadSortedPdf=async function(){
