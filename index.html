@@ -706,6 +706,7 @@ window.handlePdfUpload=async function(input){
         for(var i=1;i<=pdf.numPages;i++){
             var page=await pdf.getPage(i);
             var tc=await page.getTextContent();
+            var vp=page.getViewport({scale:1});
             var items=tc.items.map(function(it){return it.str;});
             var pageText=items.join(' ');
             var orderId=extractOrderId(pageText,items);
@@ -713,9 +714,17 @@ window.handlePdfUpload=async function(input){
             var size=extractSize(pageText,items);
             var qty=extractQty(pageText,items);
             var partner=extractPartner(pageText);
+            // Find TAX INVOICE y position (from bottom of page for pdf-lib crop)
+            var taxY=0;
+            for(var ti=0;ti<tc.items.length;ti++){
+                if(tc.items[ti].str.indexOf('TAX INVOICE')!==-1){
+                    taxY=tc.items[ti].transform[5];
+                    break;
+                }
+            }
             if(orderId||sku){
                 var isDup=orderId?scanHistory.some(function(h){return h.order_id===orderId;}):false;
-                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',qty:qty,partner:partner,isDuplicate:isDup,page:i});
+                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',qty:qty,partner:partner,isDuplicate:isDup,page:i,taxY:taxY,pageHeight:vp.height});
             }
         }
         lastPdfLabels=labels;
@@ -786,7 +795,25 @@ window.downloadSortedPdf=async function(){
             g.pages.forEach(function(idx){pageOrder.push(idx);});
         });
         var copiedPages=await newDoc.copyPages(srcDoc,pageOrder);
-        copiedPages.forEach(function(pg){newDoc.addPage(pg);});
+        copiedPages.forEach(function(pg,idx){
+            // Dynamic crop: use TAX INVOICE position from parsing
+            var w=pg.getWidth(),h=pg.getHeight();
+            var pageIdx=pageOrder[idx];
+            // Find the label for this page to get taxY
+            var label=newLabels.find(function(l){return l.page-1===pageIdx;});
+            if(label&&label.taxY>0){
+                // taxY is from bottom (pdf coords). Crop from just above TAX INVOICE to top
+                var cropY=label.taxY+5;
+                pg.setCropBox(0,cropY,w,h);
+                pg.setMediaBox(0,cropY,w,h);
+            } else {
+                // Fallback: keep top 40%
+                var cropBottom=Math.round(h*0.60);
+                pg.setCropBox(0,cropBottom,w,h);
+                pg.setMediaBox(0,cropBottom,w,h);
+            }
+            newDoc.addPage(pg);
+        });
         // Save and download
         var pdfBytes=await newDoc.save();
         var blob=new Blob([pdfBytes],{type:'application/pdf'});
