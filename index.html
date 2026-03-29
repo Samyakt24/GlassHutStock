@@ -203,7 +203,7 @@
         .dup-stat.dup-stat-bg .ds-num { color: #dc2626; }
         
         /* MONTHLY TAB STYLES */
-        .month-card { background: white; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 1rem; overflow: hidden; border-left: 5px solid #f59e0b; }
+        .month-card { background: white; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 1rem; overflow: hidden; border-left: 5px solid #c9963b; }
         .month-card-head { padding: 0.9rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; transition: background 0.2s; }
         .month-card-head:hover { background: #f0f4ff; }
         .month-card-head .month-title { font-weight: 700; font-size: 1rem; color: #1e3a5f; display: flex; align-items: center; gap: 0.5rem; }
@@ -299,7 +299,7 @@
                     <div class="sum-card red"><div class="label">Return Losses</div><div class="value" id="d-losses">₹0</div></div>
                     <div class="sum-card blue"><div class="label">Delivered</div><div class="value" id="d-del">0</div></div>
                     <div class="sum-card red"><div class="label">RTO</div><div class="value" id="d-rto">0</div></div>
-                    <div class="sum-card" style="border-left:4px solid #f59e0b"><div class="label">Return</div><div class="value" style="color:#f59e0b" id="d-return">0</div></div>
+                    <div class="sum-card" style="border-left:4px solid #c9963b"><div class="label">Return</div><div class="value" style="color:#c9963b" id="d-return">0</div></div>
                     <div class="sum-card" style="border-left:4px solid #8b5cf6"><div class="label">Exchange</div><div class="value" style="color:#8b5cf6" id="d-exchange">0</div></div>
                     <div class="sum-card" style="border-left:4px solid #6b7280"><div class="label">Pending</div><div class="value" style="color:#6b7280" id="d-pending">0</div></div>
                 </div>
@@ -318,7 +318,7 @@
                     <h4>🏭 Products (from SKU Categories)</h4>
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
                         <p style="font-size:0.7rem;color:#6b7280;margin:0">Products auto-synced from SKU tab categories. Add cost price here.</p>
-                        <button class="btn btn-sm" onclick="syncCategoriesAsProducts()" style="font-size:0.65rem;background:#f59e0b;color:white">🔄 Sync from SKU Categories</button>
+                        <button class="btn btn-sm" onclick="syncCategoriesAsProducts()" style="font-size:0.65rem;background:#c9963b;color:white">🔄 Sync from SKU Categories</button>
                     </div>
                     <div id="productsList" style="margin-top:0.5rem"></div>
                 </div>
@@ -562,7 +562,19 @@ async function loadOrders(){try{
     ordersData=allOrders;renderOrders();renderDashboard();renderMonthly();renderStock();return true;
 }catch(err){setStatus('❌ '+err.message,'error');return false;}}
 async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('category',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){skuData=[];renderSkus();document.getElementById('skuContainer').innerHTML='<div class="alert alert-danger">⚠️ Table <b>sku_map</b> not found. Create it in Supabase SQL Editor.</div>';return true;}throw new Error(r.error.message);}skuData=r.data||[];renderSkus();return true;}catch(err){skuData=[];renderSkus();return true;}}
-async function loadScanHistory(){try{var r=await db.from('scan_history').select('*');if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){scanHistory=[];return true;}throw new Error(r.error.message);}scanHistory=r.data||[];return true;}catch(err){scanHistory=[];return true;}}
+async function loadScanHistory(){try{
+    // Load ALL scan_history (paginate past 1000 limit)
+    var allData=[],page=0,pageSize=1000,hasMore=true;
+    while(hasMore){
+        var r=await db.from('scan_history').select('order_id').range(page*pageSize,(page+1)*pageSize-1);
+        if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){scanHistory=[];return true;}throw new Error(r.error.message);}
+        if(r.data&&r.data.length>0){allData=allData.concat(r.data);page++;}
+        if(!r.data||r.data.length<pageSize)hasMore=false;
+    }
+    scanHistory=allData;
+    console.log('Loaded '+scanHistory.length+' scan_history records');
+    return true;
+}catch(err){scanHistory=[];return true;}}
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
 async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
 async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();renderProducts();return true;}catch(err){inventoryData=[];return true;}}
@@ -712,7 +724,16 @@ window.handlePdfUpload=async function(input){
         if(newToSave.length>0){
             var today=new Date().toISOString().split('T')[0];
             var ins=newToSave.map(function(l){return{order_id:l.orderId,sku:l.sku,scanned_date:today};});
-            for(var b=0;b<ins.length;b+=50){var batch=ins.slice(b,b+50);await db.from('scan_history').insert(batch);}
+            var savedCount=0;
+            for(var b=0;b<ins.length;b+=50){
+                var batch=ins.slice(b,b+50);
+                try{
+                    var r=await db.from('scan_history').insert(batch);
+                    if(r.error){console.error('scan_history insert error:',r.error.message);}
+                    else{savedCount+=batch.length;}
+                }catch(e){console.error('scan_history save error:',e);}
+            }
+            console.log('Saved '+savedCount+'/'+ins.length+' to scan_history');
             await loadScanHistory();
         }
         var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
@@ -910,7 +931,7 @@ function buildCardDetails(upload){
                 var sb=s.sizeBreak[sz];
                 return '<span style="background:#f3f4f6;padding:0.1rem 0.3rem;border-radius:4px;margin:0.1rem;display:inline-block"><b>'+sz+'"</b> → '+sb.products+'</span>';
             }).join(' ');
-            html+='<tr style="border-bottom:1px solid #e2e8f0"><td style="padding:0.3rem;color:#8b6914;font-weight:700">'+(i+1)+'</td><td style="padding:0.3rem"><b>'+escapeHtml(s.sku)+'</b><div style="background:#edf2f9;border-radius:3px;height:4px;margin-top:0.2rem;overflow:hidden"><div style="background:#f59e0b;height:100%;width:'+barPct+'%"></div></div></td><td style="text-align:center;padding:0.3rem;font-weight:700;color:#8b6914">'+s.labels+'</td><td style="text-align:center;padding:0.3rem;font-weight:700;color:#059669">'+s.totalProducts+'</td><td style="padding:0.3rem;font-size:0.6rem">'+sizeText+'</td></tr>';
+            html+='<tr style="border-bottom:1px solid #e2e8f0"><td style="padding:0.3rem;color:#8b6914;font-weight:700">'+(i+1)+'</td><td style="padding:0.3rem"><b>'+escapeHtml(s.sku)+'</b><div style="background:#edf2f9;border-radius:3px;height:4px;margin-top:0.2rem;overflow:hidden"><div style="background:#c9963b;height:100%;width:'+barPct+'%"></div></div></td><td style="text-align:center;padding:0.3rem;font-weight:700;color:#8b6914">'+s.labels+'</td><td style="text-align:center;padding:0.3rem;font-weight:700;color:#059669">'+s.totalProducts+'</td><td style="padding:0.3rem;font-size:0.6rem">'+sizeText+'</td></tr>';
         });
         html+='</tbody></table></div>';
     }
@@ -918,7 +939,7 @@ function buildCardDetails(upload){
     html+='<div class="count-grid" style="margin-top:0.5rem">';
     allCats.concat(['Uncategorized']).forEach(function(cat){
         var d=allCounts[cat];if(!d||d.total===0)return;
-        var bc='#f59e0b';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
+        var bc='#c9963b';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
         html+='<div class="count-card" style="border-left-color:'+bc+'"><div class="cc-label">'+cat+'</div><div class="cc-count">'+d.total+'</div>';
         html+='<div class="cc-sub"><span style="color:#059669">🆕 '+d.newC+'</span> <span style="color:#dc2626">🔁 '+d.dupC+'</span></div></div>';
     });
@@ -1371,7 +1392,7 @@ window.handleFileUpload=async function(input){
             // Step 5: Auto-sync SKUs to stock
             var syncResult=await syncSkusToStock(true);
             var afterCount=ordersData.length;
-            var resultHtml='<div class="alert alert-success">Import done!<br><b>'+imp+'</b> orders saved | <b>'+mergedCount+'</b> fee rows merged'+(syncResult.added>0?' | <b style="color:#f59e0b">'+syncResult.added+' new SKUs added to stock</b>':'')+(errors>0?' | <b style="color:red">'+errors+' errors</b>':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Rows read: '+rows.length+' | Unique orders: '+allOrders.length+' | DB now: '+afterCount+' total</span></div>';
+            var resultHtml='<div class="alert alert-success">Import done!<br><b>'+imp+'</b> orders saved | <b>'+mergedCount+'</b> fee rows merged'+(syncResult.added>0?' | <b style="color:#c9963b">'+syncResult.added+' new SKUs added to stock</b>':'')+(errors>0?' | <b style="color:red">'+errors+' errors</b>':'')+'<br><span style="font-size:0.65rem;color:#6b7280">Rows read: '+rows.length+' | Unique orders: '+allOrders.length+' | DB now: '+afterCount+' total</span></div>';
             if(errorMsgs.length>0){
                 resultHtml+='<div class="alert alert-danger" style="margin-top:0.3rem;font-size:0.65rem;max-height:100px;overflow-y:auto"><b>Errors:</b><br>'+errorMsgs.join('<br>')+'</div>';
             }
@@ -1835,7 +1856,7 @@ function renderMonthly(){
     html+='<div class="year-card"><div class="yc-label">Return Losses</div><div class="yc-val" style="color:#dc2626">₹'+Math.round(Math.abs(totals.losses)).toLocaleString()+'</div></div>';
     html+='<div class="year-card"><div class="yc-label">Delivered</div><div class="yc-val" style="color:#2563eb">'+totals.delivered+'</div></div>';
     html+='<div class="year-card"><div class="yc-label">RTO</div><div class="yc-val" style="color:#dc2626">'+totals.rto+'</div></div>';
-    html+='<div class="year-card"><div class="yc-label">Return</div><div class="yc-val" style="color:#f59e0b">'+totals.returned+'</div></div>';
+    html+='<div class="year-card"><div class="yc-label">Return</div><div class="yc-val" style="color:#c9963b">'+totals.returned+'</div></div>';
     if(totals.exchange>0)html+='<div class="year-card"><div class="yc-label">Exchange</div><div class="yc-val" style="color:#8b5cf6">'+totals.exchange+'</div></div>';
     html+='</div>';
 
@@ -1854,7 +1875,7 @@ function renderMonthly(){
         html+='<span class="month-pill mp-recv">₹'+Math.round(m.received).toLocaleString()+'</span>';
         html+='<span class="month-pill mp-del">✅ '+m.delivered+'</span>';
         if(m.rto>0)html+='<span class="month-pill mp-rto">📦 '+m.rto+'</span>';
-        if(m.returned>0)html+='<span class="month-pill" style="background:#edf2f9;color:#f59e0b">↩️ '+m.returned+'</span>';
+        if(m.returned>0)html+='<span class="month-pill" style="background:#edf2f9;color:#c9963b">↩️ '+m.returned+'</span>';
         if(m.exchange>0)html+='<span class="month-pill" style="background:#ede9fe;color:#8b5cf6">🔄 '+m.exchange+'</span>';
         html+='</div></div>';
 
@@ -1866,7 +1887,7 @@ function renderMonthly(){
             html+='<div class="month-stat" style="border-color:#fca5a5"><div class="ms-label">Return Losses</div><div class="ms-val" style="color:#dc2626">₹'+Math.round(Math.abs(m.losses)).toLocaleString()+'</div></div>';
             html+='<div class="month-stat"><div class="ms-label">Delivered</div><div class="ms-val" style="color:#2563eb">'+m.delivered+'</div></div>';
             html+='<div class="month-stat"><div class="ms-label">RTO</div><div class="ms-val" style="color:#dc2626">'+m.rto+'</div></div>';
-            html+='<div class="month-stat"><div class="ms-label">Return</div><div class="ms-val" style="color:#f59e0b">'+m.returned+'</div></div>';
+            html+='<div class="month-stat"><div class="ms-label">Return</div><div class="ms-val" style="color:#c9963b">'+m.returned+'</div></div>';
             if(m.exchange>0)html+='<div class="month-stat"><div class="ms-label">Exchange</div><div class="ms-val" style="color:#8b5cf6">'+m.exchange+'</div></div>';
             if(m.shipped>0)html+='<div class="month-stat"><div class="ms-label">Shipped</div><div class="ms-val" style="color:#6b7280">'+m.shipped+'</div></div>';
             var delRate=totalOrders>0?Math.round(m.delivered/totalOrders*100):0;
@@ -1882,7 +1903,7 @@ function renderMonthly(){
                 platKeys.forEach(function(pk){
                     var pd=m.platforms[pk];
                     var emoji=pk==='meesho'?'🛍️':pk==='amazon'?'📦':pk==='flipkart'?'🛒':'📱';
-                    html+='<div class="plat-row"><span class="plat-name">'+emoji+' '+pk.charAt(0).toUpperCase()+pk.slice(1)+'</span><div class="plat-nums"><span style="min-width:50px;text-align:center;font-weight:600">'+pd.count+'</span><span style="min-width:80px;text-align:right;color:#059669">₹'+Math.round(pd.received).toLocaleString()+'</span><span style="min-width:40px;text-align:center;color:#2563eb">'+pd.delivered+'</span><span style="min-width:40px;text-align:center;color:#dc2626">'+pd.rto+'</span><span style="min-width:40px;text-align:center;color:#f59e0b">'+pd.returned+'</span></div></div>';
+                    html+='<div class="plat-row"><span class="plat-name">'+emoji+' '+pk.charAt(0).toUpperCase()+pk.slice(1)+'</span><div class="plat-nums"><span style="min-width:50px;text-align:center;font-weight:600">'+pd.count+'</span><span style="min-width:80px;text-align:right;color:#059669">₹'+Math.round(pd.received).toLocaleString()+'</span><span style="min-width:40px;text-align:center;color:#2563eb">'+pd.delivered+'</span><span style="min-width:40px;text-align:center;color:#dc2626">'+pd.rto+'</span><span style="min-width:40px;text-align:center;color:#c9963b">'+pd.returned+'</span></div></div>';
                 });
                 html+='</div></div>';
             }
@@ -2086,7 +2107,7 @@ document.addEventListener('DOMContentLoaded',function(){checkAuth();});
 document.getElementById('loginPassword').addEventListener('keypress',function(e){if(e.key==='Enter')doLogin();});
 document.getElementById('loginEmail').addEventListener('keypress',function(e){if(e.key==='Enter')document.getElementById('loginPassword').focus();});
 document.querySelectorAll('.upload-box').forEach(function(box){
-    box.addEventListener('dragover',function(e){e.preventDefault();box.style.borderColor='#f59e0b';});
+    box.addEventListener('dragover',function(e){e.preventDefault();box.style.borderColor='#c9963b';});
     box.addEventListener('dragleave',function(e){e.preventDefault();box.style.borderColor='#c5cfe0';});
     box.addEventListener('drop',function(e){e.preventDefault();box.style.borderColor='#c5cfe0';if(e.dataTransfer.files.length>0){var inp=box.querySelector('input[type="file"]');if(inp){inp.files=e.dataTransfer.files;inp.dispatchEvent(new Event('change'));}}});
 });
