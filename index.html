@@ -1583,21 +1583,43 @@ function renderProducts(){
         el.innerHTML='<div class="empty" style="font-size:0.7rem">No products yet. Click "🔄 Sync from SKU Categories" above.</div>';
         return;
     }
-    var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.5rem">';
+    // Collect unique brands from products
+    var brands=[];
+    productsData.forEach(function(p){if(p.brand&&brands.indexOf(p.brand)===-1)brands.push(p.brand);});
+    brands.sort();
+    var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.5rem">';
     productsData.forEach(function(p){
-        // Count SKUs mapped to this category
         var skuCount=skuData.filter(function(s){return s.category.toLowerCase().trim()===p.name.toLowerCase().trim();}).length;
         var invTotal=inventoryData.filter(function(i){return parseInt(i.product_id)===parseInt(p.id);}).reduce(function(s,i){return s+i.qty;},0);
         var isLow=invTotal>0&&invTotal<=20;
         html+='<div style="background:'+(isLow?'#fef2f2':'#f8f9fd')+';border:1px solid '+(isLow?'#fca5a5':'#c5cfe0')+';border-radius:10px;padding:0.5rem">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#1e3a5f">'+p.name+'</b><button class="act-btn del" onclick="delProduct('+p.id+')" style="font-size:0.6rem">🗑️</button></div>';
         html+='<div style="margin-top:0.3rem"><span style="font-size:0.65rem;color:#6b7280">Cost: ₹</span><input type="number" value="'+(p.cost||0)+'" onchange="updateProductCost('+p.id+',this.value)" style="width:60px;padding:0.1rem 0.3rem;border:1px solid #c5cfe0;border-radius:4px;font-size:0.7rem" min="0" step="0.01"></div>';
+        // Brand group selector
+        html+='<div style="margin-top:0.3rem;display:flex;align-items:center;gap:0.3rem"><span style="font-size:0.6rem;color:#6b7280">Group:</span>';
+        html+='<input type="text" value="'+(p.brand||'')+'" onchange="updateProductBrand('+p.id+',this.value)" list="brandList" style="width:90px;padding:0.1rem 0.3rem;border:1px solid #c5cfe0;border-radius:4px;font-size:0.65rem" placeholder="e.g. Laxmi">';
+        html+='</div>';
         html+='<div style="display:flex;gap:0.5rem;margin-top:0.3rem;font-size:0.6rem;color:#78716c"><span>🏷️ '+skuCount+' SKUs</span><span style="color:'+(invTotal>0?(isLow?'#dc2626':'#059669'):'#6b7280')+'">🏪 Stock: '+invTotal+'</span></div>';
         html+='</div>';
     });
     html+='</div>';
+    // Add datalist for brand suggestions
+    html+='<datalist id="brandList">';
+    brands.forEach(function(b){html+='<option value="'+b+'">';});
+    html+='</datalist>';
     el.innerHTML=html;
 }
+window.updateProductBrand=async function(id,brand){
+    brand=brand.trim();
+    try{
+        var res=await db.from('products').update({brand:brand}).eq('id',id).select();
+        if(res.error)throw new Error(res.error.message);
+        productsData.forEach(function(p){if(parseInt(p.id)===id)p.brand=brand;});
+        renderProducts();
+        renderInventory();
+        setStatus('✅ Group updated');
+    }catch(err){setStatus('❌ '+err.message+' — Run: ALTER TABLE products ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT \'\';','error');}
+};
 
 // INVENTORY
 window.addInventory=async function(){
@@ -1747,29 +1769,22 @@ function renderInventory(){
         grouped[pid].items.push(inv);
         grouped[pid].total+=inv.qty;
     });
-    // Detect brand from product name
-    var BRANDS=['Shree Ganesh','Laxmi','Surya'];
-    function getBrand(name){
-        for(var i=0;i<BRANDS.length;i++){if(name.toLowerCase().indexOf(BRANDS[i].toLowerCase())===0)return BRANDS[i];}
-        return 'Other';
-    }
-    // Group products by brand
+    // Group products by stored brand
     var brandGroups={};
     productsData.forEach(function(p){
         var g=grouped[parseInt(p.id)];
         if(!g)return;
-        var brand=getBrand(p.name);
+        var brand=p.brand||'Ungrouped';
         if(!brandGroups[brand])brandGroups[brand]={products:[],total:0};
         brandGroups[brand].products.push({product:p,inv:g});
         brandGroups[brand].total+=g.total;
     });
-    var brandColors={'Shree Ganesh':'#059669','Laxmi':'#2563eb','Surya':'#c9963b','Other':'#6b7280'};
+    var brandColors=['#059669','#2563eb','#c9963b','#9333ea','#dc2626','#0891b2','#6b7280'];
     var html='';
-    var brandOrder=BRANDS.concat(['Other']);
-    brandOrder.forEach(function(brand){
+    var brandNames=Object.keys(brandGroups).sort(function(a,b){if(a==='Ungrouped')return 1;if(b==='Ungrouped')return -1;return a.localeCompare(b);});
+    brandNames.forEach(function(brand,bi){
         var bg=brandGroups[brand];
-        if(!bg)return;
-        var bc=brandColors[brand]||'#6b7280';
+        var bc=brandColors[bi%brandColors.length];
         html+='<div style="border:2px solid '+bc+';border-radius:12px;padding:0.6rem;margin-bottom:0.75rem;background:white">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;padding-bottom:0.4rem;border-bottom:2px solid '+bc+'22">';
         html+='<span style="font-size:0.95rem;font-weight:800;color:'+bc+'">🏷️ '+brand+'</span>';
@@ -1779,9 +1794,7 @@ function renderInventory(){
             var p=item.product,g=item.inv;
             g.items.sort(function(a,b){return parseFloat(a.size)-parseFloat(b.size);});
             var isLow=g.items.some(function(i){return i.qty>0&&i.qty<=10;});
-            // Show variant name (remove brand prefix)
-            var variantName=p.name.replace(new RegExp('^'+brand.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*','i'),'');
-            if(!variantName)variantName=p.name;
+            var variantName=p.name;
             html+='<div style="background:'+(isLow?'#fef2f2':'#f8f9fd')+';border:1px solid '+(isLow?'#fca5a5':'#e5e7eb')+';border-radius:8px;padding:0.4rem 0.5rem;margin-bottom:0.4rem">';
             html+='<div style="display:flex;justify-content:space-between;align-items:center">';
             html+='<b style="font-size:0.75rem;color:#1e3a5f">'+variantName+'</b>';
