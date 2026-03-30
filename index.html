@@ -1605,7 +1605,7 @@ window.addInventory=async function(){
     var size=document.getElementById('inv-size').value;
     var qty=parseInt(document.getElementById('inv-qty').value)||0;
     if(!pid){alert('Select a product');return;}
-    if(!qty){alert('Enter quantity');return;}
+    if(isNaN(qty)){alert('Enter quantity');return;}
     // Check if exists
     var existing=inventoryData.find(function(i){return i.product_id===parseInt(pid)&&i.size===size;});
     try{
