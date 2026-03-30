@@ -1747,24 +1747,57 @@ function renderInventory(){
         grouped[pid].items.push(inv);
         grouped[pid].total+=inv.qty;
     });
-    var html='';
+    // Detect brand from product name
+    var BRANDS=['Shree Ganesh','Laxmi','Surya'];
+    function getBrand(name){
+        for(var i=0;i<BRANDS.length;i++){if(name.toLowerCase().indexOf(BRANDS[i].toLowerCase())===0)return BRANDS[i];}
+        return 'Other';
+    }
+    // Group products by brand
+    var brandGroups={};
     productsData.forEach(function(p){
         var g=grouped[parseInt(p.id)];
         if(!g)return;
-        g.items.sort(function(a,b){return parseFloat(a.size)-parseFloat(b.size);});
-        var isLow=g.items.some(function(i){return i.qty>0&&i.qty<=10;});
-        html+='<div style="background:'+(isLow?'#fef2f2':'#f8f9fd')+';border:1px solid '+(isLow?'#fca5a5':'#c5cfe0')+';border-radius:10px;padding:0.5rem;margin-bottom:0.5rem">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#1e3a5f">'+p.name+'</b><span style="font-size:0.7rem;font-weight:600;color:#8b6914">Total: '+g.total+'</span></div>';
-        html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.3rem">';
-        g.items.forEach(function(inv){
-            var qtyColor=inv.qty<=0?'#dc2626':inv.qty<=10?'#c9963b':'#059669';
-            html+='<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
-            html+='<div style="font-size:0.6rem;color:#6b7280">'+inv.size+'"</div>';
-            html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #c5cfe0;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem" min="0">';
-            html+='<div style="margin-top:0.2rem"><button class="act-btn del" onclick="delInventory('+inv.id+')" style="font-size:0.5rem">🗑️</button></div>';
-            html+='</div>';
+        var brand=getBrand(p.name);
+        if(!brandGroups[brand])brandGroups[brand]={products:[],total:0};
+        brandGroups[brand].products.push({product:p,inv:g});
+        brandGroups[brand].total+=g.total;
+    });
+    var brandColors={'Shree Ganesh':'#059669','Laxmi':'#2563eb','Surya':'#c9963b','Other':'#6b7280'};
+    var html='';
+    var brandOrder=BRANDS.concat(['Other']);
+    brandOrder.forEach(function(brand){
+        var bg=brandGroups[brand];
+        if(!bg)return;
+        var bc=brandColors[brand]||'#6b7280';
+        html+='<div style="border:2px solid '+bc+';border-radius:12px;padding:0.6rem;margin-bottom:0.75rem;background:white">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;padding-bottom:0.4rem;border-bottom:2px solid '+bc+'22">';
+        html+='<span style="font-size:0.95rem;font-weight:800;color:'+bc+'">🏷️ '+brand+'</span>';
+        
+        html+='</div>';
+        bg.products.forEach(function(item){
+            var p=item.product,g=item.inv;
+            g.items.sort(function(a,b){return parseFloat(a.size)-parseFloat(b.size);});
+            var isLow=g.items.some(function(i){return i.qty>0&&i.qty<=10;});
+            // Show variant name (remove brand prefix)
+            var variantName=p.name.replace(new RegExp('^'+brand.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*','i'),'');
+            if(!variantName)variantName=p.name;
+            html+='<div style="background:'+(isLow?'#fef2f2':'#f8f9fd')+';border:1px solid '+(isLow?'#fca5a5':'#e5e7eb')+';border-radius:8px;padding:0.4rem 0.5rem;margin-bottom:0.4rem">';
+            html+='<div style="display:flex;justify-content:space-between;align-items:center">';
+            html+='<b style="font-size:0.75rem;color:#1e3a5f">'+variantName+'</b>';
+            html+='<span style="font-size:0.65rem;font-weight:600;color:#8b6914">'+g.total+'</span></div>';
+            html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.25rem">';
+            g.items.forEach(function(inv){
+                var qtyColor=inv.qty<=0?'#dc2626':inv.qty<=10?'#c9963b':'#059669';
+                html+='<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
+                html+='<div style="font-size:0.6rem;color:#6b7280">'+inv.size+'"</div>';
+                html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #c5cfe0;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem" min="0">';
+                html+='<div style="margin-top:0.2rem"><button class="act-btn del" onclick="delInventory('+inv.id+')" style="font-size:0.5rem">🗑️</button></div>';
+                html+='</div>';
+            });
+            html+='</div></div>';
         });
-        html+='</div></div>';
+        html+='</div>';
     });
     el.innerHTML=html;
 }
