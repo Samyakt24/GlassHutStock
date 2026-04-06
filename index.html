@@ -481,7 +481,7 @@
             <div class="tab-content" id="tab-labels">
                 <div class="form-box">
                     <h4>📄 Upload Meesho Label PDF</h4>
-                    <p style="font-size:0.75rem;color:#6b7280;margin-bottom:0.5rem">Upload label PDFs. Each upload appears as a card below. Click to expand details. Duplicates auto-detected.</p>
+                    <p style="font-size:0.75rem;color:#6b7280;margin-bottom:0.5rem">Upload label PDF → See count → Download sorted PDF</p>
                     <div class="upload-box" onclick="document.getElementById('pdfFile').click()">
                         <div style="font-size:2rem">📄</div>
                         <p><strong>Click to upload Label PDF</strong><br>PDF file (.pdf)</p>
@@ -489,14 +489,7 @@
                     </div>
                     <div id="pdfStatus" style="margin-top:0.75rem"></div>
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
-                    <h4 style="font-size:0.9rem;color:#1e3a5f">📋 Upload History</h4>
-                    <div style="display:flex;gap:0.4rem">
-                        <button class="btn btn-danger btn-sm" onclick="clearAllUploads()" title="Delete all upload history">🗑️ Clear All</button>
-                        <button class="btn btn-danger btn-sm" onclick="clearScanHistory()" title="Reset duplicate detection">🔁 Reset Dup History</button>
-                    </div>
-                </div>
-                <div id="pdfHistoryList"><div class="empty">No PDFs uploaded yet. Upload one above!</div></div>
+                <div id="pdfHistoryList"></div>
             </div>
         </main>
     </div>
@@ -710,7 +703,6 @@ window.handlePdfUpload=async function(input){
         for(var i=1;i<=pdf.numPages;i++){
             var page=await pdf.getPage(i);
             var tc=await page.getTextContent();
-            var vp=page.getViewport({scale:1});
             var items=tc.items.map(function(it){return it.str;});
             var pageText=items.join(' ');
             var orderId=extractOrderId(pageText,items);
@@ -718,97 +710,93 @@ window.handlePdfUpload=async function(input){
             var size=extractSize(pageText,items);
             var qty=extractQty(pageText,items);
             var partner=extractPartner(pageText);
-            // Find TAX INVOICE y position (from bottom of page for pdf-lib crop)
-            var taxY=0;
-            for(var ti=0;ti<tc.items.length;ti++){
-                if(tc.items[ti].str.indexOf('TAX INVOICE')!==-1){
-                    taxY=tc.items[ti].transform[5];
-                    break;
-                }
-            }
             if(orderId||sku){
                 var isDup=orderId?scanHistory.some(function(h){return h.order_id===orderId;}):false;
-                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',qty:qty,partner:partner,isDuplicate:isDup,page:i,taxY:taxY,pageHeight:vp.height});
+                labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',qty:qty,partner:partner,isDuplicate:isDup,page:i});
             }
         }
         lastPdfLabels=labels;
         lastPdfLabels._fileName=file.name;
-        if(labels.length===0){statusDiv.innerHTML='<div class="alert alert-danger">❌ No labels found in "'+escapeHtml(file.name)+'".</div>';setStatus('❌ No labels','error');input.value='';return;}
-        // Ask: testing or real?
-        var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
-        var dp=labels.filter(function(l){return l.isDuplicate;}).length;
-        statusDiv.innerHTML='<div style="background:#f0f4ff;border:2px solid #c5cfe0;border-radius:12px;padding:1rem;text-align:center">'
-            +'<div style="font-size:1rem;font-weight:700;color:#1e3a5f;margin-bottom:0.5rem">📄 '+labels.length+' labels found — <span style="color:#059669">'+nw+' new</span>'+(dp>0?', <span style="color:#dc2626">'+dp+' duplicate</span>':'')+'</div>'
-            +'<div style="font-size:0.8rem;color:#6b7280;margin-bottom:0.75rem">Is this a test upload or real dispatch?</div>'
-            +'<div style="display:flex;gap:0.75rem;justify-content:center">'
-            +'<button class="btn" onclick="processPdfUpload(true)" style="padding:0.6rem 1.5rem;background:#e2e8f0;color:#1e3a5f;font-size:0.85rem">🧪 Just Testing</button>'
-            +'<button class="btn btn-primary" onclick="processPdfUpload(false)" style="padding:0.6rem 1.5rem;font-size:0.85rem">📦 Real Dispatch</button>'
-            +'</div></div>';
-        setStatus('Waiting...');
+        if(labels.length===0){statusDiv.innerHTML='<div class="alert alert-danger">❌ No labels found.</div>';setStatus('❌ No labels','error');input.value='';return;}
+        var newLabels=labels.filter(function(l){return !l.isDuplicate;});
+        var dupLabels=labels.filter(function(l){return l.isDuplicate;});
+        // Build result HTML
+        var html='<div style="background:linear-gradient(135deg,#d1fae5,#ecfdf5);border:2px solid #6ee7b7;border-radius:12px;padding:1rem;margin-bottom:0.75rem">';
+        html+='<div style="font-weight:700;font-size:1.1rem;color:#065f46;margin-bottom:0.5rem">📦 '+labels.length+' Labels Found — <span style="color:#059669">'+newLabels.length+' new</span>';
+        if(dupLabels.length>0)html+=', <span style="color:#dc2626">'+dupLabels.length+' duplicate</span>';
+        html+='</div>';
+        // Show duplicate order IDs if any
+        if(dupLabels.length>0){
+            html+='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:0.5rem;margin-bottom:0.75rem;max-height:120px;overflow-y:auto">';
+            html+='<div style="font-size:0.7rem;font-weight:700;color:#991b1b;margin-bottom:0.3rem">🔁 Duplicate Order IDs (already dispatched):</div>';
+            html+='<div style="font-size:0.6rem;color:#7f1d1d;line-height:1.6">';
+            dupLabels.forEach(function(l){html+='<span style="display:inline-block;background:#fee2e2;border-radius:4px;padding:0.1rem 0.4rem;margin:0.1rem">'+l.orderId+'</span>';});
+            html+='</div></div>';
+        }
+        // Category count for NEW labels
+        var countByCategory={};
+        var allCats=CATEGORIES.slice();
+        skuData.forEach(function(s){if(allCats.indexOf(s.category)===-1)allCats.push(s.category);});
+        newLabels.forEach(function(l){
+            var match=findCategory(l.sku);
+            var cat=match?match.category:'Uncategorized';
+            if(!countByCategory[cat])countByCategory[cat]={count:0,sizes:{}};
+            countByCategory[cat].count++;
+            var sz=l.size||'-';
+            countByCategory[cat].sizes[sz]=(countByCategory[cat].sizes[sz]||0)+1;
+        });
+        if(newLabels.length>0){
+            html+='<div style="font-size:0.8rem;font-weight:600;color:#065f46;margin-bottom:0.4rem">📦 New Labels by Category:</div>';
+            html+='<div class="count-grid" style="margin:0">';
+            allCats.concat(['Uncategorized']).forEach(function(cat){
+                var d=countByCategory[cat];if(!d||d.count===0)return;
+                var bc='#10b981';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
+                html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+cat+'</div><div class="cc-count" style="color:'+bc+'">'+d.count+'</div>';
+                var sizes=Object.keys(d.sizes).sort();
+                if(sizes.length>0){
+                    html+='<div style="margin-top:0.3rem;font-size:0.65rem;color:#374151">';
+                    sizes.forEach(function(sz){html+='<span style="display:inline-block;background:#f3f4f6;border-radius:4px;padding:0.1rem 0.4rem;margin:0.1rem;font-weight:500">'+sz+'" × '+d.sizes[sz]+'</span>';});
+                    html+='</div>';
+                }
+                html+='</div>';
+            });
+            html+='</div>';
+        }
+        // Download buttons - choice: all or new only
+        html+='<div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">';
+        if(dupLabels.length>0&&newLabels.length>0){
+            html+='<button class="btn btn-primary" onclick="downloadSortedPdf(false)" style="font-size:0.8rem;padding:0.5rem 1rem">📥 Download New Only ('+newLabels.length+')</button>';
+            html+='<button class="btn" onclick="downloadSortedPdf(true)" style="font-size:0.8rem;padding:0.5rem 1rem;background:#e2e8f0;color:#1e3a5f">📥 Download All ('+labels.length+')</button>';
+        } else {
+            html+='<button class="btn btn-primary" onclick="downloadSortedPdf(true)" style="font-size:0.8rem;padding:0.5rem 1rem">📥 Download Sorted PDF ('+labels.length+')</button>';
+        }
+        html+='<button class="btn btn-success" onclick="confirmDispatch()" style="font-size:0.8rem;padding:0.5rem 1rem">✅ Confirm Dispatch</button>';
+        html+='</div></div>';
+        // Save upload history
+        var upload={name:file.name,labels:labels,newCount:newLabels.length,dupCount:dupLabels.length};
+        await savePdfUpload(upload);
+        await loadPdfHistory();
+        if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
+        renderPdfHistory();
+        statusDiv.innerHTML=html;
+        setStatus('✅ '+labels.length+' labels parsed');
         input.value='';
     }catch(err){
         statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';
         setStatus('❌ Error','error');
     }
 };
-window.processPdfUpload=async function(isTesting){
-    var statusDiv=document.getElementById('pdfStatus');
-    var labels=lastPdfLabels;
-    if(!labels||labels.length===0)return;
-    var nw=labels.filter(function(l){return !l.isDuplicate;}).length;
-    var dp=labels.filter(function(l){return l.isDuplicate;}).length;
-    if(isTesting){
-        // Testing mode: just show count, no save, no dispatch
-        statusDiv.innerHTML='<div class="alert alert-info">🧪 <b>Test mode</b> — '+labels.length+' labels ('+nw+' new, '+dp+' duplicate). Nothing saved.<br>'
-            +'<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (preview only)</button></div>';
-        setStatus('🧪 Test mode');
-        return;
-    }
-    // Real mode: save to scan_history, show all options
-    statusDiv.innerHTML='<div class="alert alert-info">Saving labels...</div>';
-    setStatus('Saving...','syncing');
-    try{
-        var newToSave=labels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
-        if(newToSave.length>0){
-            var today=new Date().toISOString().split('T')[0];
-            var ins=newToSave.map(function(l){return{order_id:l.orderId,sku:l.sku,scanned_date:today};});
-            var savedCount=0;
-            for(var b=0;b<ins.length;b+=50){
-                var batch=ins.slice(b,b+50);
-                try{
-                    var r=await db.from('scan_history').insert(batch);
-                    if(r.error){console.error('scan_history insert error:',r.error.message);}
-                    else{savedCount+=batch.length;}
-                }catch(e){console.error('scan_history save error:',e);}
-            }
-            console.log('Saved '+savedCount+'/'+ins.length+' to scan_history');
-            await loadScanHistory();
-        }
-        var upload={name:(lastPdfLabels._fileName||'labels.pdf'),labels:labels,newCount:nw,dupCount:dp};
-        await savePdfUpload(upload);
-        await loadPdfHistory();
-        if(pdfUploads.length>0)openCardId=pdfUploads[0].id;
-        renderPdfHistory();
-        statusDiv.innerHTML='<div class="alert alert-success">✅ <b>'+labels.length+'</b> labels found — <span style="color:#059669"><b>'+nw+' new</b></span>'+(dp>0?', <span style="color:#dc2626"><b>'+dp+' duplicate</b></span>':'')+'<br><button class="btn btn-primary btn-sm" onclick="downloadSortedPdf()" style="margin-top:0.5rem;font-size:0.7rem">📥 Download Sorted PDF (SKU → Size → Qty)</button> <button class="btn btn-success btn-sm" onclick="confirmDispatch()" style="margin-top:0.5rem;font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button></div>';
-        setStatus('✅ '+labels.length+' labels processed');
-    }catch(err){
-        statusDiv.innerHTML='<div class="alert alert-danger">❌ '+err.message+'</div>';
-        setStatus('❌ Error','error');
-    }
-};
 
-window.downloadSortedPdf=async function(){
+window.downloadSortedPdf=async function(includeAll){
     if(!lastPdfData||!lastPdfLabels){alert('Upload a label PDF first');return;}
-    // Only include NEW labels (not duplicates)
-    var newLabels=lastPdfLabels.filter(function(l){return !l.isDuplicate;});
-    if(newLabels.length===0){alert('No new labels to sort! All labels are duplicates (already packed).');return;}
-    setStatus('🔄 Generating sorted PDF ('+newLabels.length+' new labels)...','syncing');
+    var allLabels=includeAll?lastPdfLabels:lastPdfLabels.filter(function(l){return !l.isDuplicate;});
+    if(allLabels.length===0){alert('No labels to sort!');return;}
+    setStatus('🔄 Generating sorted PDF ('+allLabels.length+' labels)...','syncing');
     try{
         var srcDoc=await PDFLib.PDFDocument.load(lastPdfData);
         var newDoc=await PDFLib.PDFDocument.create();
-        // Group NEW labels by SKU + Size + Qty and sort
         var skuGroups={};
-        newLabels.forEach(function(l){
+        allLabels.forEach(function(l){
             var sku=l.sku||'Unknown';
             var size=l.size||'-';
             var qty=l.qty||1;
@@ -951,6 +939,15 @@ function buildCardDetails(upload){
         html+='<div style="text-align:center;padding:0.5rem;color:#065f46;font-size:0.85rem">✅ All orders already packed! Nothing new to pack.</div>';
     }
     html+='</div>';
+    // Action buttons inside card
+    if(totalPack>0){
+        html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">';
+        html+='<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf(false)" style="font-size:0.7rem">📥 Download New Only</button>';
+        html+='<button class="btn btn-sm" onclick="downloadSortedPdf(true)" style="font-size:0.7rem;background:#e2e8f0;color:#1e3a5f">📥 Download All</button>';
+        html+='<button class="btn btn-success btn-sm" onclick="confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button>';
+        if(!lastPdfData)html+='<span style="font-size:0.6rem;color:#c9963b;align-self:center">💡 Re-upload same PDF to download sorted version</span>';
+        html+='</div>';
+    }
     // SKU × QTY Packing List
     if(totalPack>0){
         var skuQty={};
@@ -1806,6 +1803,20 @@ window.executeDispatch=async function(){
     }
     pendingDeductions=null;
     await loadInventory();
+    // Save to scan_history for duplicate detection (only on actual dispatch)
+    if(lastPdfLabels){
+        var newToSave=lastPdfLabels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
+        if(newToSave.length>0){
+            var today=new Date().toISOString().split('T')[0];
+            var ins=newToSave.map(function(l){return{order_id:l.orderId,sku:l.sku,scanned_date:today};});
+            for(var b=0;b<ins.length;b+=50){
+                var batch=ins.slice(b,b+50);
+                try{await db.from('scan_history').insert(batch);}catch(e){}
+            }
+            await loadScanHistory();
+            console.log('Saved '+ins.length+' to scan_history on dispatch');
+        }
+    }
     setStatus('✅ Dispatched! '+total+' products deducted from '+updated+' entries');
     // Remove dispatch form
     var form=document.getElementById('dispatchForm');
