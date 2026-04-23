@@ -834,14 +834,12 @@ window.downloadSortedPdf=async function(includeAll){
         a.click();
         URL.revokeObjectURL(url);
         // Show summary
-        // Show summary grouped by partner
-        var dupCount=lastPdfLabels.length-newLabels.length;
         var summary=sortedKeys.map(function(key){
             var g=skuGroups[key];
             return g.sku+' ('+g.size+'", qty:'+g.qty+') × '+g.pages.length;
         }).join(', ');
         setStatus('✅ Sorted PDF downloaded!');
-        document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.65rem">📋 <b>'+newLabels.length+' new labels</b> sorted'+(dupCount>0?' ('+dupCount+' duplicates removed)':'')+'<br>Order: '+summary+'</div>';
+        document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.65rem">📋 <b>'+allLabels.length+' labels</b> sorted<br>Order: '+summary+'</div>';
     }catch(err){
         setStatus('❌ Sort failed: '+err.message,'error');
         alert('Error generating sorted PDF: '+err.message);
