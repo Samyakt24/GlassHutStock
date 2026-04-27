@@ -263,6 +263,7 @@
                 <div class="form-group"><label>Email</label><input type="email" id="loginEmail" placeholder="your@email.com"></div>
                 <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="••••••••"></div>
                 <button class="login-btn" id="loginBtn" onclick="doLogin()">Login</button>
+                <div style="text-align:center;margin-top:0.75rem"><a href="#" onclick="forgotPassword();return false;" style="color:#2c5282;font-size:0.8rem;text-decoration:none">Forgot Password?</a></div>
             </div>
         </div>
     </div>
@@ -541,8 +542,48 @@ async function doLogin(){
     document.getElementById('loginBtn').disabled=false;document.getElementById('loginBtn').textContent='Login';
 }
 async function doLogout(){await db.auth.signOut();currentUser=null;document.getElementById('loginPage').classList.remove('hide');document.getElementById('appContainer').classList.remove('show');}
+window.forgotPassword=async function(){
+    var email=document.getElementById('loginEmail').value.trim();
+    if(!email){alert('Enter your email first, then click Forgot Password');return;}
+    try{
+        var r=await db.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+window.location.pathname});
+        if(r.error)throw new Error(r.error.message);
+        alert('✅ Password reset link sent to '+email+'\nCheck your inbox!');
+    }catch(err){alert('❌ '+err.message);}
+};
 function showApp(){document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData();loadPdfHistory();}
-async function checkAuth(){var r=await db.auth.getSession();if(r.data.session){currentUser=r.data.session.user;showApp();}}
+async function checkAuth(){
+    // Check for password reset token in URL
+    var hash=window.location.hash;
+    if(hash&&hash.includes('type=recovery')){
+        // User clicked password reset link
+        try{
+            var r=await db.auth.getSession();
+            if(r.data.session){
+                showPasswordReset();
+                return;
+            }
+        }catch(e){}
+    }
+    var r=await db.auth.getSession();if(r.data.session){currentUser=r.data.session.user;showApp();}
+}
+function showPasswordReset(){
+    var loginPage=document.getElementById('loginPage');
+    loginPage.innerHTML='<div class="login-box"><div class="login-header" style="display:flex;flex-direction:column;align-items:center;padding:2rem"><h1 style="color:white;margin:0;font-size:1.5rem">🔒 Reset Password</h1><p style="color:rgba(255,255,255,0.8);margin:0.25rem 0 0;font-size:0.85rem">Enter your new password</p></div><div class="login-body"><div class="form-group"><label>New Password</label><input type="password" id="newPassword" placeholder="Enter new password" minlength="6"></div><div class="form-group"><label>Confirm Password</label><input type="password" id="confirmPassword" placeholder="Confirm new password"></div><button class="login-btn" onclick="submitNewPassword()">Update Password</button><div id="resetError" style="color:#dc2626;font-size:0.75rem;margin-top:0.5rem;text-align:center"></div></div></div>';
+}
+window.submitNewPassword=async function(){
+    var pw=document.getElementById('newPassword').value;
+    var cpw=document.getElementById('confirmPassword').value;
+    var errDiv=document.getElementById('resetError');
+    if(!pw||pw.length<6){errDiv.textContent='Password must be at least 6 characters';return;}
+    if(pw!==cpw){errDiv.textContent='Passwords do not match';return;}
+    try{
+        var r=await db.auth.updateUser({password:pw});
+        if(r.error)throw new Error(r.error.message);
+        alert('✅ Password updated successfully! Please login with your new password.');
+        window.location.href=window.location.origin+window.location.pathname;
+    }catch(err){errDiv.textContent='❌ '+err.message;}
+};
 function setStatus(msg,type){var bar=document.getElementById('statusBar');bar.textContent=msg;bar.className='status-bar'+(type==='error'?' error':type==='syncing'?' syncing':'');}
 
 // DATA
