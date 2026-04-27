@@ -306,10 +306,7 @@
                 </div>
                 <div id="alertBox"></div>
                 <div class="card" style="margin-bottom:1rem"><div class="card-header">💰 Profit Summary</div><div class="card-body" id="dashProfit"><div class="loading">Loading...</div></div></div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-                    <div class="card"><div class="card-header">📦 Low Stock</div><div class="card-body" id="dashLow"><div class="loading">Loading...</div></div></div>
-                    <div class="card"><div class="card-header">🕐 Recent Orders</div><div class="card-body" id="dashRecent"><div class="loading">Loading...</div></div></div>
-                </div>
+                <div class="card" style="margin-bottom:1rem"><div class="card-header">🕐 Recent Orders</div><div class="card-body" id="dashRecent"><div class="loading">Loading...</div></div></div>
                 <div class="card" style="margin-top:1rem"><div class="card-header">🏆 Top 5 Selling SKUs (by Units)</div><div class="card-body" id="dashTopSku"><div class="loading">Loading...</div></div></div>
             </div>
             
@@ -2228,7 +2225,6 @@ function renderDashboard(){
     } else {
         document.getElementById('alertBox').innerHTML='';
     }
-    document.getElementById('dashLow').innerHTML=low.length>0?low.slice(0,5).map(function(x){return'<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #e2e8f0;font-size:0.75rem"><span>'+x.name+'</span><span style="color:#dc2626">'+x.qty+'</span></div>';}).join(''):'<div class="empty">All OK ✅</div>';
     document.getElementById('dashRecent').innerHTML=ordersData.length>0?ordersData.slice(0,5).map(function(x){return'<div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-bottom:1px solid #e2e8f0;font-size:0.7rem"><span>'+(x.remark||x.order_id.substring(0,10)+'..')+' <span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'?')+'</span></span><span>₹'+x.received+'</span></div>';}).join(''):'<div class="empty">No orders</div>';
 
     // Top 5 Selling SKUs
