@@ -827,14 +827,19 @@ window.handlePdfUpload=async function(input){
             html+='</div>';
         }
         // Download buttons - choice: all or new only
-        html+='<div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">';
+        html+='<div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">';
+        html+='<span style="font-size:0.7rem;font-weight:700;color:#1e3a5f">Step 1:</span>';
         if(dupLabels.length>0&&newLabels.length>0){
             html+='<button class="btn btn-primary" onclick="downloadSortedPdf(false)" style="font-size:0.8rem;padding:0.5rem 1rem">📥 Download New Only ('+newLabels.length+')</button>';
             html+='<button class="btn" onclick="downloadSortedPdf(true)" style="font-size:0.8rem;padding:0.5rem 1rem;background:#e2e8f0;color:#1e3a5f">📥 Download All ('+labels.length+')</button>';
         } else {
             html+='<button class="btn btn-primary" onclick="downloadSortedPdf(true)" style="font-size:0.8rem;padding:0.5rem 1rem">📥 Download Sorted PDF ('+labels.length+')</button>';
         }
-        
+        html+='</div>';
+        html+='<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px dashed #c5cfe0;display:flex;gap:0.5rem;align-items:center">';
+        html+='<span style="font-size:0.7rem;font-weight:700;color:#1e3a5f">Step 2:</span>';
+        html+='<span style="font-size:0.7rem;color:#6b7280">Check stock → Print labels → Then:</span>';
+        html+='<button class="btn btn-success" onclick="confirmDispatch()" style="font-size:0.8rem;padding:0.5rem 1rem">✅ Confirm Dispatch (deduct stock)</button>';
         html+='</div></div>';
         // Save upload history
         var upload={name:file.name,labels:labels,newCount:newLabels.length,dupCount:dupLabels.length};
@@ -1015,11 +1020,15 @@ function buildCardDetails(upload){
     html+='</div>';
     // Action buttons inside card
     if(totalPack>0){
-        html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">';
+        html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;align-items:center">';
+        html+='<span style="font-size:0.65rem;font-weight:700;color:#1e3a5f">Step 1:</span>';
         html+='<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf(false)" style="font-size:0.7rem">📥 Download New Only</button>';
         html+='<button class="btn btn-sm" onclick="downloadSortedPdf(true)" style="font-size:0.7rem;background:#e2e8f0;color:#1e3a5f">📥 Download All</button>';
-        
-        if(!lastPdfData)html+='<span style="font-size:0.6rem;color:#c9963b;align-self:center">💡 Re-upload same PDF to download sorted version</span>';
+        if(!lastPdfData)html+='<span style="font-size:0.6rem;color:#c9963b;align-self:center">💡 Re-upload same PDF to enable download</span>';
+        html+='</div>';
+        html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center;padding-top:0.4rem;border-top:1px dashed #c5cfe0">';
+        html+='<span style="font-size:0.65rem;font-weight:700;color:#1e3a5f">Step 2:</span>';
+        html+='<button class="btn btn-success btn-sm" onclick="confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button>';
         html+='</div>';
     }
     // SKU × QTY Packing List
@@ -1635,10 +1644,12 @@ window.syncCategoriesAsProducts=async function(){
 window.delProduct=async function(id){
     if(!confirm('Delete this product? Inventory for this product will also be deleted.'))return;
     try{
-        await db.from('inventory').delete().eq('product_id',id);
-        await db.from('products').delete().eq('id',id);
+        var r1=await db.from('inventory').delete().eq('product_id',id);
+        if(r1.error){console.error('Inv delete error:',r1.error.message);alert('❌ Cannot delete inventory: '+r1.error.message+'\n\nRun in Supabase SQL Editor:\nALTER TABLE inventory DISABLE ROW LEVEL SECURITY;');return;}
+        var r2=await db.from('products').delete().eq('id',id);
+        if(r2.error){console.error('Product delete error:',r2.error.message);alert('❌ Cannot delete product: '+r2.error.message+'\n\nRun in Supabase SQL Editor:\nALTER TABLE products DISABLE ROW LEVEL SECURITY;');return;}
         await loadProducts();await loadInventory();setStatus('✅ Deleted');
-    }catch(err){setStatus('❌ '+err.message,'error');}
+    }catch(err){alert('❌ '+err.message);setStatus('❌ '+err.message,'error');}
 };
 window.updateProductCost=async function(id,val){
     var newCost=parseFloat(val)||0;
