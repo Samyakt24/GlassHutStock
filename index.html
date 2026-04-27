@@ -551,29 +551,48 @@ window.forgotPassword=async function(){
         alert('✅ Password reset link sent to '+email+'\nCheck your inbox!');
     }catch(err){alert('❌ '+err.message);}
 };
-function showApp(){document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData();loadPdfHistory();}
+function showApp(){
+    if(isPasswordReset)return; // NEVER show app during password reset
+    document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData();loadPdfHistory();
+}
 var isPasswordReset=false;
 async function checkAuth(){
-    // Listen for PASSWORD_RECOVERY event from reset link
+    // Step 1: Check URL hash FIRST (synchronous, reliable)
+    var hash=window.location.hash||'';
+    var params=new URLSearchParams(window.location.search);
+    var fullUrl=window.location.href;
+    if(hash.includes('type=recovery')||hash.includes('type%3Drecovery')||params.get('type')==='recovery'||fullUrl.includes('type=recovery')){
+        isPasswordReset=true;
+        // Wait for Supabase to process the token
+        await new Promise(function(resolve){setTimeout(resolve,1000);});
+        showPasswordReset();
+        // Clean URL
+        history.replaceState(null,'',window.location.pathname);
+        return;
+    }
+    // Step 2: Listen for PASSWORD_RECOVERY event (backup)
     db.auth.onAuthStateChange(function(event,session){
         if(event==='PASSWORD_RECOVERY'){
             isPasswordReset=true;
             showPasswordReset();
         }
     });
+    // Step 3: Normal auth check
     var r=await db.auth.getSession();
     if(r.data.session){
-        // Small delay to let onAuthStateChange fire first
-        setTimeout(function(){
-            if(!isPasswordReset){
-                currentUser=r.data.session.user;
-                showApp();
-            }
-        },500);
+        // Wait a moment to let onAuthStateChange fire if it's a recovery
+        await new Promise(function(resolve){setTimeout(resolve,800);});
+        if(!isPasswordReset){
+            currentUser=r.data.session.user;
+            showApp();
+        }
     }
 }
 function showPasswordReset(){
+    isPasswordReset=true;
     var loginPage=document.getElementById('loginPage');
+    loginPage.classList.remove('hide');
+    document.getElementById('appContainer').classList.remove('show');
     loginPage.innerHTML='<div class="login-box"><div class="login-header" style="display:flex;flex-direction:column;align-items:center;padding:2rem"><h1 style="color:white;margin:0;font-size:1.5rem">🔒 Reset Password</h1><p style="color:rgba(255,255,255,0.8);margin:0.25rem 0 0;font-size:0.85rem">Enter your new password</p></div><div class="login-body"><div class="form-group"><label>New Password</label><input type="password" id="newPassword" placeholder="Enter new password" minlength="6"></div><div class="form-group"><label>Confirm Password</label><input type="password" id="confirmPassword" placeholder="Confirm new password"></div><button class="login-btn" onclick="submitNewPassword()">Update Password</button><div id="resetError" style="color:#dc2626;font-size:0.75rem;margin-top:0.5rem;text-align:center"></div></div></div>';
 }
 window.submitNewPassword=async function(){
@@ -585,7 +604,9 @@ window.submitNewPassword=async function(){
     try{
         var r=await db.auth.updateUser({password:pw});
         if(r.error)throw new Error(r.error.message);
-        alert('✅ Password updated successfully! Please login with your new password.');
+        await db.auth.signOut();
+        isPasswordReset=false;
+        alert('✅ Password updated! Please login with your new password.');
         window.location.href=window.location.origin+window.location.pathname;
     }catch(err){errDiv.textContent='❌ '+err.message;}
 };
