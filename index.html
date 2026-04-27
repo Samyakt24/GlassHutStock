@@ -552,20 +552,25 @@ window.forgotPassword=async function(){
     }catch(err){alert('❌ '+err.message);}
 };
 function showApp(){document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData();loadPdfHistory();}
+var isPasswordReset=false;
 async function checkAuth(){
-    // Check for password reset token in URL
-    var hash=window.location.hash;
-    if(hash&&hash.includes('type=recovery')){
-        // User clicked password reset link
-        try{
-            var r=await db.auth.getSession();
-            if(r.data.session){
-                showPasswordReset();
-                return;
+    // Listen for PASSWORD_RECOVERY event from reset link
+    db.auth.onAuthStateChange(function(event,session){
+        if(event==='PASSWORD_RECOVERY'){
+            isPasswordReset=true;
+            showPasswordReset();
+        }
+    });
+    var r=await db.auth.getSession();
+    if(r.data.session){
+        // Small delay to let onAuthStateChange fire first
+        setTimeout(function(){
+            if(!isPasswordReset){
+                currentUser=r.data.session.user;
+                showApp();
             }
-        }catch(e){}
+        },500);
     }
-    var r=await db.auth.getSession();if(r.data.session){currentUser=r.data.session.user;showApp();}
 }
 function showPasswordReset(){
     var loginPage=document.getElementById('loginPage');
