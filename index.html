@@ -333,7 +333,7 @@
                     <div class="form-row">
                         <div class="form-grp"><label>Product *</label><select id="inv-product"><option value="">-- Select --</option></select></div>
                         <div class="form-grp" style="max-width:100px"><label>Size *</label><select id="inv-size"><option>2.2</option><option selected>2.4</option><option>2.6</option><option>2.8</option></select></div>
-                        <div class="form-grp" style="max-width:80px"><label>Qty *</label><input type="number" id="inv-qty" min="0" placeholder="50"></div>
+                        <div class="form-grp" style="max-width:80px"><label>Qty *</label><input type="number" id="inv-qty" placeholder="50"></div>
                         <div class="form-grp" style="align-self:flex-end"><button class="btn btn-primary" onclick="addInventory()">➕ Add</button></div>
                     </div>
                     <div id="inventoryList" style="margin-top:0.5rem"></div>
@@ -837,7 +837,7 @@ window.handlePdfUpload=async function(input){
         } else {
             html+='<button class="btn btn-primary" onclick="downloadSortedPdf(true)" style="font-size:0.8rem;padding:0.5rem 1rem">📥 Download Sorted PDF ('+labels.length+')</button>';
         }
-        html+='<button class="btn btn-success" onclick="confirmDispatch()" style="font-size:0.8rem;padding:0.5rem 1rem">✅ Confirm Dispatch</button>';
+        
         html+='</div></div>';
         // Save upload history
         var upload={name:file.name,labels:labels,newCount:newLabels.length,dupCount:dupLabels.length};
@@ -906,6 +906,18 @@ window.downloadSortedPdf=async function(includeAll){
             return g.sku+' ('+g.size+'", qty:'+g.qty+') × '+g.pages.length;
         }).join(', ');
         setStatus('✅ Sorted PDF downloaded!');
+        // Save to scan_history for duplicate detection
+        if(lastPdfLabels){
+            var newToSave=lastPdfLabels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
+            if(newToSave.length>0){
+                var today=new Date().toISOString().split('T')[0];
+                var ins=newToSave.map(function(l){return{order_id:l.orderId,sku:l.sku,scanned_date:today};});
+                for(var b=0;b<ins.length;b+=50){
+                    try{await db.from('scan_history').insert(ins.slice(b,b+50));}catch(e){}
+                }
+                await loadScanHistory();
+            }
+        }
         document.getElementById('pdfStatus').innerHTML+='<div class="alert alert-info" style="margin-top:0.3rem;font-size:0.65rem">📋 <b>'+allLabels.length+' labels</b> sorted<br>Order: '+summary+'</div>';
     }catch(err){
         setStatus('❌ Sort failed: '+err.message,'error');
@@ -1009,7 +1021,7 @@ function buildCardDetails(upload){
         html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap">';
         html+='<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf(false)" style="font-size:0.7rem">📥 Download New Only</button>';
         html+='<button class="btn btn-sm" onclick="downloadSortedPdf(true)" style="font-size:0.7rem;background:#e2e8f0;color:#1e3a5f">📥 Download All</button>';
-        html+='<button class="btn btn-success btn-sm" onclick="confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button>';
+        
         if(!lastPdfData)html+='<span style="font-size:0.6rem;color:#c9963b;align-self:center">💡 Re-upload same PDF to download sorted version</span>';
         html+='</div>';
     }
@@ -1657,7 +1669,7 @@ function renderProducts(){
     productsData.forEach(function(p){
         var skuCount=skuData.filter(function(s){return s.category.toLowerCase().trim()===p.name.toLowerCase().trim();}).length;
         var invTotal=inventoryData.filter(function(i){return parseInt(i.product_id)===parseInt(p.id);}).reduce(function(s,i){return s+i.qty;},0);
-        var isLow=invTotal>0&&invTotal<=20;
+        var isLow=invTotal<0||(invTotal>0&&invTotal<=20);
         html+='<div style="background:'+(isLow?'#fef2f2':'#f8f9fd')+';border:1px solid '+(isLow?'#fca5a5':'#c5cfe0')+';border-radius:10px;padding:0.5rem">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#1e3a5f">'+p.name+'</b><button class="act-btn del" onclick="delProduct('+p.id+')" style="font-size:0.6rem">🗑️</button></div>';
         html+='<div style="margin-top:0.3rem"><span style="font-size:0.65rem;color:#6b7280">Cost: ₹</span><input type="number" value="'+(p.cost||0)+'" onchange="updateProductCost('+p.id+',this.value)" style="width:60px;padding:0.1rem 0.3rem;border:1px solid #c5cfe0;border-radius:4px;font-size:0.7rem" min="0" step="0.01"></div>';
@@ -1932,7 +1944,7 @@ function renderInventory(){
         bg.products.forEach(function(item){
             var p=item.product,g=item.inv;
             g.items.sort(function(a,b){return parseFloat(a.size)-parseFloat(b.size);});
-            var isLow=g.items.some(function(i){return i.qty>0&&i.qty<=10;});
+            var isLow=g.items.some(function(i){return i.qty<0||(i.qty>0&&i.qty<=10);});
             var variantName=p.name;
             html+='<div style="background:'+(isLow?'#fef2f2':'#f8f9fd')+';border:1px solid '+(isLow?'#fca5a5':'#e5e7eb')+';border-radius:8px;padding:0.4rem 0.5rem;margin-bottom:0.4rem">';
             html+='<div style="display:flex;justify-content:space-between;align-items:center">';
@@ -1940,10 +1952,10 @@ function renderInventory(){
             html+='<span style="font-size:0.65rem;font-weight:600;color:#8b6914">'+g.total+'</span></div>';
             html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.25rem">';
             g.items.forEach(function(inv){
-                var qtyColor=inv.qty<=0?'#dc2626':inv.qty<=10?'#c9963b':'#059669';
+                var qtyColor=inv.qty<0?'#dc2626':inv.qty===0?'#9ca3af':inv.qty<=10?'#c9963b':'#059669';
                 html+='<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
                 html+='<div style="font-size:0.6rem;color:#6b7280">'+inv.size+'"</div>';
-                html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #c5cfe0;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem" min="0">';
+                html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #c5cfe0;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem">';
                 html+='<div style="margin-top:0.2rem"><button class="act-btn del" onclick="delInventory('+inv.id+')" style="font-size:0.5rem">🗑️</button></div>';
                 html+='</div>';
             });
@@ -2175,7 +2187,7 @@ function renderDashboard(){
     var ret=ordersData.filter(function(x){return x.status==='Return';}).length;
     var exc=ordersData.filter(function(x){return x.status==='Exchange';}).length;
     var pend=ordersData.filter(function(x){return x.status==='Shipped'||x.status==='Pending';}).length;
-    var low=inventoryData.filter(function(x){return x.qty>0&&x.qty<=20;}).map(function(x){
+    var low=inventoryData.filter(function(x){return x.qty<0||( x.qty>0&&x.qty<=20);}).map(function(x){
         var prod=productsData.find(function(p){return parseInt(p.id)===parseInt(x.product_id);});
         return{name:(prod?prod.name:'?')+' '+x.size+'"',qty:x.qty};
     });
@@ -2188,28 +2200,29 @@ function renderDashboard(){
     document.getElementById('d-exchange').textContent=exc;
     document.getElementById('d-pending').textContent=pend;
     if(low.length>0){
-        // Group by product name (without size)
         var lowGroups={};
         low.forEach(function(x){
-            var parts=x.name.split(' ');
-            var size=parts.pop(); // last part is size like "2.8""
-            var product=parts.join(' ');
-            if(!lowGroups[product])lowGroups[product]=[];
-            lowGroups[product].push({size:size,qty:x.qty});
+            var prod=x.name.replace(/ \d+\.?\d*"$/,'');
+            var size=x.name.match(/(\d+\.?\d*")$/);
+            size=size?size[1]:x.name;
+            if(!lowGroups[prod])lowGroups[prod]=[];
+            lowGroups[prod].push({size:size,qty:x.qty});
         });
-        var alertHtml='<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:0.6rem 0.75rem;margin-bottom:0.5rem">';
-        alertHtml+='<div style="font-weight:700;color:#991b1b;font-size:0.8rem;margin-bottom:0.4rem">⚠️ Low Stock ('+low.length+' items)</div>';
+        var alertHtml='<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:10px;padding:0.75rem;margin-bottom:0.75rem">';
+        alertHtml+='<div style="font-weight:700;color:#991b1b;font-size:0.85rem;margin-bottom:0.5rem">⚠️ Low Stock ('+low.length+' items)</div>';
         alertHtml+='<div style="display:flex;flex-wrap:wrap;gap:0.4rem">';
-        Object.keys(lowGroups).forEach(function(product){
+        var products=Object.keys(lowGroups).sort();
+        for(var pi=0;pi<products.length;pi++){
+            var product=products[pi];
             var items=lowGroups[product];
-            alertHtml+='<div style="background:white;border:1px solid #fca5a5;border-radius:8px;padding:0.3rem 0.5rem;font-size:0.7rem">';
+            alertHtml+='<div style="background:white;border:1px solid #fca5a5;border-radius:8px;padding:0.35rem 0.5rem;font-size:0.7rem">';
             alertHtml+='<div style="font-weight:600;color:#1e3a5f;margin-bottom:0.15rem">'+product+'</div>';
-            items.forEach(function(item){
-                var color=item.qty<=5?'#dc2626':item.qty<=10?'#c9963b':'#6b7280';
-                alertHtml+='<span style="display:inline-block;background:#fef2f2;border-radius:4px;padding:0.1rem 0.3rem;margin:0.05rem;font-size:0.6rem;color:'+color+';font-weight:600">'+item.size+': '+item.qty+'</span>';
-            });
+            for(var ii=0;ii<items.length;ii++){
+                var color=items[ii].qty<0?'#dc2626':items[ii].qty<=5?'#dc2626':items[ii].qty<=10?'#c9963b':'#6b7280';
+                alertHtml+='<span style="display:inline-block;background:#fef2f2;border-radius:4px;padding:0.1rem 0.3rem;margin:0.05rem;font-size:0.6rem;color:'+color+';font-weight:600">'+items[ii].size+': '+items[ii].qty+'</span>';
+            }
             alertHtml+='</div>';
-        });
+        }
         alertHtml+='</div></div>';
         document.getElementById('alertBox').innerHTML=alertHtml;
     } else {
