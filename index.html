@@ -1669,7 +1669,7 @@ function renderProducts(){
     productsData.forEach(function(p){
         var skuCount=skuData.filter(function(s){return s.category.toLowerCase().trim()===p.name.toLowerCase().trim();}).length;
         var invTotal=inventoryData.filter(function(i){return parseInt(i.product_id)===parseInt(p.id);}).reduce(function(s,i){return s+i.qty;},0);
-        var isLow=invTotal<0||(invTotal>0&&invTotal<=20);
+        var isLow=invTotal<0||(invTotal>0&&invTotal<=10);
         html+='<div style="background:'+(isLow?'#fef2f2':'#f8f9fd')+';border:1px solid '+(isLow?'#fca5a5':'#c5cfe0')+';border-radius:10px;padding:0.5rem">';
         html+='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:0.8rem;color:#1e3a5f">'+p.name+'</b><button class="act-btn del" onclick="delProduct('+p.id+')" style="font-size:0.6rem">🗑️</button></div>';
         html+='<div style="margin-top:0.3rem"><span style="font-size:0.65rem;color:#6b7280">Cost: ₹</span><input type="number" value="'+(p.cost||0)+'" onchange="updateProductCost('+p.id+',this.value)" style="width:60px;padding:0.1rem 0.3rem;border:1px solid #c5cfe0;border-radius:4px;font-size:0.7rem" min="0" step="0.01"></div>';
@@ -2187,7 +2187,7 @@ function renderDashboard(){
     var ret=ordersData.filter(function(x){return x.status==='Return';}).length;
     var exc=ordersData.filter(function(x){return x.status==='Exchange';}).length;
     var pend=ordersData.filter(function(x){return x.status==='Shipped'||x.status==='Pending';}).length;
-    var low=inventoryData.filter(function(x){return x.qty<0||( x.qty>0&&x.qty<=20);}).map(function(x){
+    var low=inventoryData.filter(function(x){return x.qty<0||(x.qty>0&&x.qty<=10);}).map(function(x){
         var prod=productsData.find(function(p){return parseInt(p.id)===parseInt(x.product_id);});
         return{name:(prod?prod.name:'?')+' '+x.size+'"',qty:x.qty};
     });
