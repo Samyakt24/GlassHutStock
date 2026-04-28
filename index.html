@@ -1010,7 +1010,21 @@ function buildCardDetails(upload){
         }
     });
     if(unmapped.length>0){
-        html+='<div style="background:#edf2f9;border:1px solid #c5cfe0;border-radius:8px;padding:0.6rem;margin-bottom:0.75rem;font-size:0.7rem;color:#1e3a5f">⚠️ <b>'+unmapped.length+' SKU(s) not mapped</b> — go to <b>SKU tab</b> to assign: '+unmapped.map(function(s){return'<b>'+escapeHtml(s)+'</b>';}).join(', ')+'</div>';
+        // Debug: find closest match for each unmapped SKU
+        var debugInfo=unmapped.map(function(sku){
+            var n=normSku(sku);
+            var closest='';var bestScore=0;
+            skuData.forEach(function(s){
+                var ns=normSku(s.sku_name);
+                // Count matching words
+                var words1=n.split(' '),words2=ns.split(' ');
+                var score=0;
+                words1.forEach(function(w){if(words2.indexOf(w)!==-1)score++;});
+                if(score>bestScore){bestScore=score;closest=s.sku_name+' → '+s.category;}
+            });
+            return '<div style="display:flex;gap:0.5rem;padding:0.2rem 0;border-bottom:1px solid #e5e7eb"><span style="color:#dc2626;font-weight:600;min-width:220px">Label: "'+escapeHtml(sku)+'"</span><span style="color:#059669">Closest SKU: "'+escapeHtml(closest)+'"</span></div>';
+        }).join('');
+        html+='<div style="background:#edf2f9;border:1px solid #c5cfe0;border-radius:8px;padding:0.6rem;margin-bottom:0.75rem;font-size:0.7rem;color:#1e3a5f">⚠️ <b>'+unmapped.length+' SKU(s) not mapped</b> — Label name vs closest SKU match:<div style="margin-top:0.4rem;font-size:0.65rem">'+debugInfo+'</div><div style="margin-top:0.4rem;font-size:0.6rem;color:#6b7280">💡 Go to <b>SKU tab</b> and add these exact label names as SKUs, OR rename existing SKUs to match.</div></div>';
     }
     var totalPack=newLabels.length;
     html+='<div style="background:linear-gradient(135deg,#d1fae5,#ecfdf5);border:2px solid #6ee7b7;border-radius:12px;padding:1rem;margin-bottom:1rem">';
