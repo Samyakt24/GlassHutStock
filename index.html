@@ -962,6 +962,13 @@ window.downloadSortedPdf=async function(includeAll){
     }
 };
 
+window.useCardLabels=function(uploadId){
+    // Load labels from stored upload into lastPdfLabels (for dispatch/download from card)
+    var upload=pdfUploads.find(function(u){return u.id===uploadId;});
+    if(upload&&upload.labels&&upload.labels.length>0){
+        lastPdfLabels=upload.labels;
+    }
+};
 window.togglePdfCard=function(id){openCardId=(openCardId===id)?null:id;renderPdfHistory();};
 window.deleteUpload=async function(id){if(!confirm('Delete this upload and its dispatch history?'))return;
     try{
@@ -1094,13 +1101,13 @@ function buildCardDetails(upload){
     if(totalPack>0){
         html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;align-items:center">';
         html+='<span style="font-size:0.65rem;font-weight:700;color:#1e3a5f">Step 1:</span>';
-        html+='<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf(false)" style="font-size:0.7rem">📥 Download New Only</button>';
-        html+='<button class="btn btn-sm" onclick="downloadSortedPdf(true)" style="font-size:0.7rem;background:#e2e8f0;color:#1e3a5f">📥 Download All</button>';
+        html+='<button class="btn btn-primary btn-sm" onclick="useCardLabels('+upload.id+');downloadSortedPdf(false)" style="font-size:0.7rem">📥 Download New Only</button>';
+        html+='<button class="btn btn-sm" onclick="useCardLabels('+upload.id+');downloadSortedPdf(true)" style="font-size:0.7rem;background:#e2e8f0;color:#1e3a5f">📥 Download All</button>';
         if(!lastPdfData)html+='<span style="font-size:0.6rem;color:#c9963b;align-self:center">💡 Re-upload same PDF to enable download</span>';
         html+='</div>';
         html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center;padding-top:0.4rem;border-top:1px dashed #c5cfe0">';
         html+='<span style="font-size:0.65rem;font-weight:700;color:#1e3a5f">Step 2:</span>';
-        html+='<button class="btn btn-success btn-sm" onclick="confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button>';
+        html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button>';
         html+='</div>';
     }
     // SKU × QTY Packing List
@@ -1876,7 +1883,7 @@ window.delInventory=async function(id){
 };
 var pendingDeductions=null;
 window.confirmDispatch=async function(){
-    if(!lastPdfLabels){alert('Upload a label PDF first');return;}
+    if(!lastPdfLabels||lastPdfLabels.length===0){alert('Upload a label PDF first');return;}
     var newLabels=lastPdfLabels.filter(function(l){return !l.isDuplicate;});
     if(newLabels.length===0){alert('No new labels to dispatch');return;}
     // Map category → base product → product_id
