@@ -527,7 +527,7 @@ var MERGE_BASES=['Light Multi']; // Add more here when needed, e.g. 'Dark Multi'
 // Category aliases: different category names that are same product
 var CATEGORY_ALIAS={'light gold multi 24':'light multi chuda','light golden set-24':'light multi chuda'};
 function getBaseProduct(cat){
-    var base=(cat||'').replace(/\s*\d+\s*$/,'').trim();
+    var base=(cat||'').replace(/[-\s]*\d+\s*$/,'').trim();
     if(MERGE_BASES.indexOf(base)!==-1)return base;
     return cat; // Don't merge, return original
 }
@@ -550,7 +550,7 @@ function mergeCategoryCounts(countByCategory){
         if(!merged[base])merged[base]={count:0,dozens:0,sizes:{},subCats:[]};
         merged[base].count+=d.count;
         merged[base].dozens+=(d.count*mult);
-        merged[base].subCats.push(cat+': '+d.count);
+        merged[base].subCats.push({name:cat,labels:d.count,dzn:d.count*mult});
         Object.keys(d.sizes).forEach(function(sz){
             merged[base].sizes[sz]=(merged[base].sizes[sz]||0)+(d.sizes[sz]*mult);
         });
@@ -658,7 +658,26 @@ async function loadOrders(){try{
     }
     ordersData=allOrders;renderOrders();renderDashboard();renderMonthly();renderStock();return true;
 }catch(err){setStatus('❌ '+err.message,'error');return false;}}
-async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('category',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){skuData=[];renderSkus();document.getElementById('skuContainer').innerHTML='<div class="alert alert-danger">⚠️ Table <b>sku_map</b> not found. Create it in Supabase SQL Editor.</div>';return true;}throw new Error(r.error.message);}skuData=r.data||[];renderSkus();return true;}catch(err){skuData=[];renderSkus();return true;}}
+async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('category',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){skuData=[];renderSkus();document.getElementById('skuContainer').innerHTML='<div class="alert alert-danger">⚠️ Table <b>sku_map</b> not found. Create it in Supabase SQL Editor.</div>';return true;}throw new Error(r.error.message);}skuData=r.data||[];
+    // Auto-normalize: fix duplicate categories like "Light Multi-12" vs "Light Multi 12"
+    var normMap={};
+    skuData.forEach(function(s){
+        var key=s.category.toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();
+        if(!normMap[key])normMap[key]=s.category;
+    });
+    var toFix=skuData.filter(function(s){
+        var key=s.category.toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();
+        return s.category!==normMap[key];
+    });
+    if(toFix.length>0){
+        for(var fi=0;fi<toFix.length;fi++){
+            var key=toFix[fi].category.toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();
+            try{await db.from('sku_map').update({category:normMap[key]}).eq('id',toFix[fi].id);}catch(e){}
+            toFix[fi].category=normMap[key];
+        }
+        console.log('Auto-fixed '+toFix.length+' SKU categories');
+    }
+    renderSkus();return true;}catch(err){skuData=[];renderSkus();return true;}}
 async function loadScanHistory(){try{
     // Load ALL scan_history (paginate past 1000 limit)
     var allData=[],page=0,pageSize=1000,hasMore=true;
@@ -673,7 +692,34 @@ async function loadScanHistory(){try{
     return true;
 }catch(err){scanHistory=[];return true;}}
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
-async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
+async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];
+    // Auto-cleanup: remove duplicate products (same normalized name, keep one with stock)
+    var normProd={};
+    productsData.forEach(function(p){
+        var key=p.name.toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();
+        if(!normProd[key])normProd[key]=[];
+        normProd[key].push(p);
+    });
+    var toDelete=[];
+    Object.keys(normProd).forEach(function(key){
+        var prods=normProd[key];
+        if(prods.length<=1)return;
+        // Find which has most stock
+        prods.forEach(function(p){
+            p._stock=inventoryData.filter(function(i){return parseInt(i.product_id)===parseInt(p.id);}).reduce(function(s,i){return s+Math.abs(i.qty);},0);
+        });
+        prods.sort(function(a,b){return b._stock-a._stock;});
+        // Delete all except the one with most stock
+        for(var di=1;di<prods.length;di++){toDelete.push(prods[di].id);}
+    });
+    if(toDelete.length>0){
+        for(var di=0;di<toDelete.length;di++){
+            try{await db.from('products').delete().eq('id',toDelete[di]);}catch(e){}
+        }
+        productsData=productsData.filter(function(p){return toDelete.indexOf(p.id)===-1;});
+        console.log('Auto-deleted '+toDelete.length+' duplicate products');
+    }
+    renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
 async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();renderProducts();renderDashboard();return true;}catch(err){inventoryData=[];return true;}}
 async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();if(s&&o)setStatus('✅ Connected');}
 
@@ -856,7 +902,7 @@ window.handlePdfUpload=async function(input){
                 var bc='#10b981';if(base.includes('Light'))bc='#eab308';if(base.includes('Dark'))bc='#818cf8';if(base.includes('GOLD'))bc='#fb923c';if(base==='Uncategorized')bc='#9ca3af';
                 html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+base+'</div>';
                 html+='<div class="cc-count" style="color:'+bc+'">'+d.dozens+'<span style="font-size:0.5rem;color:#6b7280"> dzn</span></div>';
-                html+='<div style="font-size:0.55rem;color:#6b7280;margin-top:0.1rem">('+d.subCats.join(', ')+')</div>';
+                if(d.subCats.length>1){html+='<div style="margin-top:0.2rem">';d.subCats.forEach(function(sc){html+='<div style="display:flex;justify-content:space-between;font-size:0.6rem;padding:0.1rem 0;border-bottom:1px solid #f3f4f6"><span style="color:#374151">'+sc.name+'</span><span><b style="color:#8b6914">'+sc.labels+'</b><span style="color:#9ca3af"> labels</span> = <b style="color:#059669">'+sc.dzn+'</b><span style="color:#9ca3af"> dzn</span></span></div>';});html+='</div>';}
                 var sizes=Object.keys(d.sizes).sort();
                 if(sizes.length>0){
                     html+='<div style="margin-top:0.3rem;font-size:0.65rem;color:#374151">';
@@ -1089,7 +1135,7 @@ function buildCardDetails(upload){
             var bc='#10b981';if(base.includes('Light'))bc='#eab308';if(base.includes('Dark'))bc='#818cf8';if(base.includes('GOLD'))bc='#fb923c';if(base==='Uncategorized')bc='#9ca3af';
             html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+base+'</div>';
             html+='<div class="cc-count" style="color:'+bc+'">'+d.dozens+'<span style="font-size:0.5rem;color:#6b7280"> dzn</span></div>';
-            html+='<div style="font-size:0.55rem;color:#6b7280;margin-top:0.1rem">('+d.subCats.join(', ')+')</div>';
+            if(d.subCats.length>1){html+='<div style="margin-top:0.2rem">';d.subCats.forEach(function(sc){html+='<div style="display:flex;justify-content:space-between;font-size:0.6rem;padding:0.1rem 0;border-bottom:1px solid #f3f4f6"><span style="color:#374151">'+sc.name+'</span><span><b style="color:#8b6914">'+sc.labels+'</b><span style="color:#9ca3af"> labels</span> = <b style="color:#059669">'+sc.dzn+'</b><span style="color:#9ca3af"> dzn</span></span></div>';});html+='</div>';}
             var sizes=Object.keys(d.sizes).sort();
             if(sizes.length>0){
                 html+='<div style="margin-top:0.3rem;font-size:0.65rem;color:#374151">';
@@ -1705,14 +1751,21 @@ window.syncSkusManual=async function(){
 // PRODUCTS
 window.syncCategoriesAsProducts=async function(){
     if(skuData.length===0){alert('No SKU categories found. Go to SKU tab and add categories first.');return;}
-    // Get unique categories
-    var cats={};
-    skuData.forEach(function(s){if(s.category&&!cats[s.category])cats[s.category]=true;});
-    var catNames=Object.keys(cats);
-    // Check which already exist as products
+    // Normalize function: "Light Multi-12" and "Light Multi 12" → same key
+    function normCat(n){return(n||'').toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();}
+    // Get unique categories (normalized dedup, keep first name)
+    var catMap={};
+    skuData.forEach(function(s){
+        if(s.category){
+            var key=normCat(s.category);
+            if(!catMap[key])catMap[key]=s.category;
+        }
+    });
+    var catNames=Object.values(catMap);
+    // Check which already exist as products (normalized comparison)
     var existingProducts={};
-    productsData.forEach(function(p){existingProducts[p.name.toLowerCase().trim()]=true;});
-    var newCats=catNames.filter(function(c){return !existingProducts[c.toLowerCase().trim()];});
+    productsData.forEach(function(p){existingProducts[normCat(p.name)]=true;});
+    var newCats=catNames.filter(function(c){return !existingProducts[normCat(c)];});
     if(newCats.length===0){setStatus('All categories already synced');return;}
     setStatus('Syncing '+newCats.length+' categories...','syncing');
     var added=0;
@@ -1946,6 +1999,10 @@ window.confirmDispatch=async function(){
         var aliasTarget=CATEGORY_ALIAS[catNorm];
         var pid=null;
         if(aliasTarget)pid=catToProduct[normName(aliasTarget)]||baseToProduct[normName(aliasTarget)];
+        // For merged categories (e.g. Light Multi), ALWAYS use baseToProduct (picks one with stock)
+        if(!pid&&MERGE_BASES.indexOf(getBaseProduct(cat))!==-1){
+            pid=baseToProduct[baseNorm];
+        }
         // Then try exact → base → partial match
         if(!pid)pid=catToProduct[catNorm]||baseToProduct[baseNorm];
         // Fallback: find product whose normalized name contains category base or vice versa
