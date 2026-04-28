@@ -1888,48 +1888,71 @@ window.confirmDispatch=async function(){
     var newLabels=lastPdfLabels._fromCard?lastPdfLabels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}):lastPdfLabels.filter(function(l){return !l.isDuplicate;});
     if(newLabels.length===0){alert('No labels to dispatch');return;}
     if(!confirm('📦 Confirm Dispatch?\n\n'+newLabels.length+' labels will be dispatched.\nStock will be deducted.\n\nAre you sure?'))return;
-    // Map category → base product → product_id
+    // Map category → base product → product_id (lenient matching)
     var catToProduct={};
     var baseToProduct={};
+    function normName(n){return(n||'').toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();}
     productsData.forEach(function(p){
-        catToProduct[p.name.toLowerCase().trim()]=p.id;
-        var base=getBaseProduct(p.name).toLowerCase().trim();
+        catToProduct[normName(p.name)]=p.id;
+        var base=normName(getBaseProduct(p.name));
         if(!baseToProduct[base])baseToProduct[base]=p.id;
     });
     var skuToProduct={};
     var skuToMultiplier={};
     skuData.forEach(function(s){
         var cat=s.category.trim();
-        var catLow=cat.toLowerCase();
-        var baseLow=getBaseProduct(cat).toLowerCase().trim();
+        var catNorm=normName(cat);
+        var baseNorm=normName(getBaseProduct(cat));
         var mult=getPackMultiplier(cat);
-        // Try exact category match first, then base product match
-        var pid=catToProduct[catLow]||baseToProduct[baseLow];
+        // Try exact → base → partial match
+        var pid=catToProduct[catNorm]||baseToProduct[baseNorm];
+        // Fallback: find product whose normalized name contains category base or vice versa
+        if(!pid){
+            var found=productsData.find(function(p){
+                var pn=normName(p.name);
+                return pn.indexOf(baseNorm)!==-1||baseNorm.indexOf(pn)!==-1;
+            });
+            if(found)pid=found.id;
+        }
         if(pid){
-            skuToProduct[s.sku_name.trim().toLowerCase()]=pid;
-            skuToMultiplier[s.sku_name.trim().toLowerCase()]=mult;
+            skuToProduct[normSku(s.sku_name)]=pid;
+            skuToMultiplier[normSku(s.sku_name)]=mult;
         }
     });
     var deductions={};
     var unmappedSkus=[];
     newLabels.forEach(function(l){
-        var sku=(l.sku||'').trim().toLowerCase();
+        var sku=normSku(l.sku);
         var pid=skuToProduct[sku];
+        // Fallback: try partial match
+        if(!pid){
+            var skuKeys=Object.keys(skuToProduct);
+            for(var si=0;si<skuKeys.length;si++){
+                if(sku.indexOf(skuKeys[si])!==-1||skuKeys[si].indexOf(sku)!==-1){pid=skuToProduct[skuKeys[si]];break;}
+            }
+        }
         if(!pid){if(unmappedSkus.indexOf(l.sku)===-1)unmappedSkus.push(l.sku);return;}
         var size=l.size||'-';
         var qty=l.qty||1;
-        var mult=skuToMultiplier[sku]||1;
+        var mult=skuToMultiplier[normSku(l.sku)]||1;
         var key=pid+'|||'+size;
         if(!deductions[key])deductions[key]={product_id:pid,size:size,qty:0,labels:0};
         deductions[key].qty+=(qty*mult);
         deductions[key].labels++;
     });
     pendingDeductions=deductions;
+    var mappedCount=newLabels.length-unmappedSkus.reduce(function(total,sku){return total+newLabels.filter(function(l){return l.sku===sku;}).length;},0);
     // Show editable dispatch form
     var html='<div id="dispatchForm" style="background:#f8f9fd;border:2px solid #c5cfe0;border-radius:12px;padding:1rem;margin-top:0.5rem">';
-    html+='<div style="font-weight:700;font-size:0.9rem;color:#1e3a5f;margin-bottom:0.5rem">📦 Dispatch — Edit quantities before confirming</div>';
+    html+='<div style="font-weight:700;font-size:0.9rem;color:#1e3a5f;margin-bottom:0.5rem">📦 Dispatch — '+mappedCount+'/'+newLabels.length+' labels mapped to products</div>';
     if(unmappedSkus.length>0){
-        html+='<div style="background:#edf2f9;padding:0.4rem;border-radius:6px;font-size:0.65rem;color:#1e3a5f;margin-bottom:0.5rem">⚠️ Unmapped: '+unmappedSkus.join(', ')+'</div>';
+        html+='<div style="background:#fef2f2;padding:0.5rem;border-radius:6px;font-size:0.65rem;color:#991b1b;margin-bottom:0.5rem">⚠️ <b>'+unmappedSkus.length+' SKU(s) unmapped</b> (not deducted): '+unmappedSkus.join(', ')+'<br><span style="color:#6b7280">Products in DB: '+productsData.map(function(p){return p.name;}).join(', ')+'</span></div>';
+    }
+    if(Object.keys(deductions).length===0){
+        html+='<div style="background:#fef2f2;padding:0.75rem;border-radius:6px;font-size:0.8rem;color:#dc2626;text-align:center;margin-bottom:0.5rem">❌ No products matched! Check SKU tab mappings and Stock tab products.</div>';
+        html+='</div>';
+        document.getElementById('pdfStatus').innerHTML+=html;
+        return;
     }
     html+='<table style="width:100%;font-size:0.75rem"><thead><tr><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Product</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Size</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">Labels</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">Deduct (dzn)</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">In Stock</th></tr></thead><tbody>';
     var keys=Object.keys(deductions).sort();
