@@ -325,7 +325,7 @@
                     <div id="productsList" style="margin-top:0.5rem"></div>
                 </div>
                 <div class="form-box">
-                    <h4>📊 Inventory (Stock per Size)</h4>
+                    <div style="display:flex;justify-content:space-between;align-items:center"><h4>📊 Inventory (Stock per Size)</h4><div id="undoBtn"></div></div>
                     <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Track how many pieces you have per product per size.</p>
                     <div class="form-row">
                         <div class="form-grp"><label>Product *</label><select id="inv-product"><option value="">-- Select --</option></select></div>
@@ -524,6 +524,8 @@ const CATEGORIES=['Light Multi 24','Light Multi 12','Dark Multi 24','Dark Multi 
 const CAT_COLORS={'Light Multi 24':'cat-light24','Light Multi 12':'cat-light12','Dark Multi 24':'cat-dark24','Dark Multi 12':'cat-dark12','GOLD Multi 24':'cat-gold24','Uncategorized':'cat-uncategorized'};
 // Pack size helpers - ONLY for Light Multi 12/24 merge
 var MERGE_BASES=['Light Multi']; // Add more here when needed, e.g. 'Dark Multi'
+// Category aliases: different category names that are same product
+var CATEGORY_ALIAS={'light gold multi 24':'light multi chuda','light golden set-24':'light multi chuda'};
 function getBaseProduct(cat){
     var base=(cat||'').replace(/\s*\d+\s*$/,'').trim();
     if(MERGE_BASES.indexOf(base)!==-1)return base;
@@ -539,7 +541,10 @@ function getPackMultiplier(cat){
 function mergeCategoryCounts(countByCategory){
     var merged={};
     Object.keys(countByCategory).forEach(function(cat){
-        var base=getBaseProduct(cat);
+        var catNorm=cat.toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();
+        // Check alias
+        var aliasTarget=CATEGORY_ALIAS[catNorm];
+        var base=aliasTarget?aliasTarget:getBaseProduct(cat);
         var mult=getPackMultiplier(cat);
         var d=countByCategory[cat];
         if(!merged[base])merged[base]={count:0,dozens:0,sizes:{},subCats:[]};
@@ -555,6 +560,7 @@ function mergeCategoryCounts(countByCategory){
 const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[];
+var inventoryBackup=null; // Stores last inventory state for undo
 let platform='meesho',filterPlat='all',filterStatus='all',currentUser=null;
 let openMonthKey=null;
 
@@ -1870,6 +1876,8 @@ window.addInventory=async function(){
     }catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message);}
 };
 window.updateInventoryQty=async function(id,val){
+    // Save backup before manual edit
+    if(!inventoryBackup)inventoryBackup={timestamp:new Date().toISOString(),data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})};
     try{
         var res=await db.from('inventory').update({qty:parseInt(val)||0}).eq('id',id).select();
         if(res.error)throw new Error(res.error.message);
@@ -1880,6 +1888,28 @@ window.updateInventoryQty=async function(id,val){
 window.delInventory=async function(id){
     if(!confirm('Delete this stock entry?'))return;
     try{await db.from('inventory').delete().eq('id',id);await loadInventory();setStatus('✅ Deleted');}catch(err){setStatus('❌ '+err.message,'error');}
+};
+window.undoLastDispatch=async function(){
+    if(!inventoryBackup){alert('No dispatch to undo');return;}
+    var t=new Date(inventoryBackup.timestamp);
+    var timeStr=t.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    if(!confirm('↩️ Undo Last Dispatch?\n\nThis will restore stock to what it was before dispatch at '+timeStr+'.\n\nAre you sure?'))return;
+    setStatus('↩️ Restoring stock...','syncing');
+    var restored=0;
+    try{
+        for(var i=0;i<inventoryBackup.data.length;i++){
+            var item=inventoryBackup.data[i];
+            var res=await db.from('inventory').update({qty:item.qty}).eq('id',item.id);
+            if(!res.error)restored++;
+        }
+        inventoryBackup=null;
+        await loadInventory();
+        setStatus('✅ Stock restored! '+restored+' entries reverted');
+        alert('✅ Stock restored to pre-dispatch levels!');
+    }catch(err){
+        setStatus('❌ Undo failed: '+err.message,'error');
+        alert('❌ Undo failed: '+err.message);
+    }
 };
 var pendingDeductions=null;
 window.confirmDispatch=async function(){
@@ -1912,8 +1942,12 @@ window.confirmDispatch=async function(){
         var catNorm=normName(cat);
         var baseNorm=normName(getBaseProduct(cat));
         var mult=getPackMultiplier(cat);
-        // Try exact → base → partial match
-        var pid=catToProduct[catNorm]||baseToProduct[baseNorm];
+        // Check alias first
+        var aliasTarget=CATEGORY_ALIAS[catNorm];
+        var pid=null;
+        if(aliasTarget)pid=catToProduct[normName(aliasTarget)]||baseToProduct[normName(aliasTarget)];
+        // Then try exact → base → partial match
+        if(!pid)pid=catToProduct[catNorm]||baseToProduct[baseNorm];
         // Fallback: find product whose normalized name contains category base or vice versa
         if(!pid){
             var found=productsData.find(function(p){
@@ -1994,6 +2028,11 @@ window.cancelDispatch=function(){
 window.executeDispatch=async function(){
     if(!pendingDeductions)return;
     if(!confirm('✅ Confirm & Deduct Stock?\n\nThis will update your inventory. Are you sure?'))return;
+    // Save backup for undo
+    inventoryBackup={
+        timestamp:new Date().toISOString(),
+        data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})
+    };
     var keys=Object.keys(pendingDeductions);
     setStatus('Deducting stock...','syncing');
     var updated=0,total=0;
@@ -2040,6 +2079,17 @@ window.executeDispatch=async function(){
 function renderInventory(){
     var el=document.getElementById('inventoryList');
     if(!el)return;
+    // Show/hide undo button
+    var undoEl=document.getElementById('undoBtn');
+    if(undoEl){
+        if(inventoryBackup){
+            var t=new Date(inventoryBackup.timestamp);
+            var timeStr=t.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+            undoEl.innerHTML='<button class="btn btn-sm" onclick="undoLastDispatch()" style="font-size:0.65rem;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;padding:0.25rem 0.75rem">↩️ Undo Last Dispatch ('+timeStr+')</button>';
+        } else {
+            undoEl.innerHTML='';
+        }
+    }
     // Populate product dropdown
     var sel=document.getElementById('inv-product');
     if(sel){
