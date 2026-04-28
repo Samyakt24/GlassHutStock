@@ -550,7 +550,7 @@ window.forgotPassword=async function(){
 };
 function showApp(){
     if(isPasswordReset)return; // NEVER show app during password reset
-    document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData();loadPdfHistory();
+    document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData().then(function(){loadPdfHistory();});
 }
 var isPasswordReset=false;
 async function checkAuth(){
@@ -760,7 +760,9 @@ window.handlePdfUpload=async function(input){
     setStatus('🔄 Parsing PDF...','syncing');
     try{
         await loadScanHistory();
-        var arrayBuffer=await file.arrayBuffer();
+        await loadSkus();
+        console.log('SKU map loaded:',skuData.length,'entries');
+        skuData.forEach(function(s){console.log('  SKU:',JSON.stringify(s.sku_name),'→',s.category);});        var arrayBuffer=await file.arrayBuffer();
         lastPdfData=arrayBuffer.slice(0);
         var pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
         var labels=[];
@@ -2409,17 +2411,22 @@ function findCategory(sku){
     if(!n)return null;
     // 1. Exact match
     var exact=skuData.find(function(s){return normSku(s.sku_name)===n;});
-    if(exact)return{category:exact.category};
-    // 2. Label SKU contains stored SKU name (e.g. label="Shri Ganesh 24 Choodi Red Colour", stored="Shri Ganesh 24 Choodi Red")
+    if(exact){return{category:exact.category};}
+    // 2. Label SKU contains stored SKU name
     var partial=skuData.find(function(s){var ns=normSku(s.sku_name);return ns.length>=5&&n.indexOf(ns)!==-1;});
-    if(partial)return{category:partial.category};
-    // 3. Stored SKU contains label SKU (e.g. stored="Shri Ganesh 24 Choodi Red Colour", label="Shri Ganesh 24 Choodi Red")
+    if(partial){console.log('Partial match:',sku,'→',partial.sku_name);return{category:partial.category};}
+    // 3. Stored SKU contains label SKU
     var reverse=skuData.find(function(s){var ns=normSku(s.sku_name);return n.length>=5&&ns.indexOf(n)!==-1;});
-    if(reverse)return{category:reverse.category};
-    // 4. Remove numbers/hyphens and try (e.g. "Light Multi-12" vs "Light Multi 12")
+    if(reverse){console.log('Reverse match:',sku,'→',reverse.sku_name);return{category:reverse.category};}
+    // 4. Remove hyphens/underscores and try
     var clean=n.replace(/[-_]/g,' ').replace(/\s+/g,' ');
     var cleanMatch=skuData.find(function(s){return normSku(s.sku_name).replace(/[-_]/g,' ').replace(/\s+/g,' ')===clean;});
-    if(cleanMatch)return{category:cleanMatch.category};
+    if(cleanMatch){console.log('Clean match:',sku,'→',cleanMatch.sku_name);return{category:cleanMatch.category};}
+    // 5. Remove trailing number (e.g. "Dark Multi-12" → "Dark Multi" matches "Dark Multi 12")
+    var noTrailNum=clean.replace(/\s*\d+\s*$/,'').trim();
+    var trailMatch=skuData.find(function(s){var ns=normSku(s.sku_name).replace(/[-_]/g,' ').replace(/\s*\d+\s*$/,'').trim();return noTrailNum.length>=5&&ns===noTrailNum;});
+    if(trailMatch){console.log('Trail number match:',sku,'→',trailMatch.sku_name);return{category:trailMatch.category};}
+    console.log('NO MATCH for:',JSON.stringify(sku),'(normalized:',JSON.stringify(n)+')');
     return null;
 }
 function escapeJs(str){return str.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');}
