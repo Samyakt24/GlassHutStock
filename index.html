@@ -963,10 +963,10 @@ window.downloadSortedPdf=async function(includeAll){
 };
 
 window.useCardLabels=function(uploadId){
-    // Load labels from stored upload into lastPdfLabels (for dispatch/download from card)
     var upload=pdfUploads.find(function(u){return u.id===uploadId;});
     if(upload&&upload.labels&&upload.labels.length>0){
         lastPdfLabels=upload.labels;
+        lastPdfLabels._fromCard=true;
     }
 };
 window.togglePdfCard=function(id){openCardId=(openCardId===id)?null:id;renderPdfHistory();};
@@ -1884,8 +1884,10 @@ window.delInventory=async function(id){
 var pendingDeductions=null;
 window.confirmDispatch=async function(){
     if(!lastPdfLabels||lastPdfLabels.length===0){alert('Upload a label PDF first');return;}
-    var newLabels=lastPdfLabels.filter(function(l){return !l.isDuplicate;});
-    if(newLabels.length===0){alert('No new labels to dispatch');return;}
+    // If loaded from card (useCardLabels), use all labels; if fresh upload, filter duplicates
+    var newLabels=lastPdfLabels._fromCard?lastPdfLabels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}):lastPdfLabels.filter(function(l){return !l.isDuplicate;});
+    if(newLabels.length===0){alert('No labels to dispatch');return;}
+    if(!confirm('📦 Confirm Dispatch?\n\n'+newLabels.length+' labels will be dispatched.\nStock will be deducted.\n\nAre you sure?'))return;
     // Map category → base product → product_id
     var catToProduct={};
     var baseToProduct={};
@@ -1960,6 +1962,7 @@ window.cancelDispatch=function(){
 };
 window.executeDispatch=async function(){
     if(!pendingDeductions)return;
+    if(!confirm('✅ Confirm & Deduct Stock?\n\nThis will update your inventory. Are you sure?'))return;
     var keys=Object.keys(pendingDeductions);
     setStatus('Deducting stock...','syncing');
     var updated=0,total=0;
