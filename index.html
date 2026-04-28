@@ -928,8 +928,27 @@ window.downloadSortedPdf=async function(includeAll){
 };
 
 window.togglePdfCard=function(id){openCardId=(openCardId===id)?null:id;renderPdfHistory();};
-window.deleteUpload=async function(id){if(!confirm('Delete this upload?'))return;
-    try{await db.from('pdf_uploads').delete().eq('id',id);if(openCardId===id)openCardId=null;await loadPdfHistory();setStatus('✅ Deleted');}catch(err){setStatus('❌ '+err.message,'error');}};
+window.deleteUpload=async function(id){if(!confirm('Delete this upload and its dispatch history?'))return;
+    try{
+        // Get the upload to find order IDs
+        var upload=pdfUploads.find(function(u){return u.id===id;});
+        if(upload&&upload.labels&&upload.labels.length>0){
+            // Delete these order IDs from scan_history
+            var orderIds=upload.labels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}).map(function(l){return l.orderId;});
+            if(orderIds.length>0){
+                // Delete in batches of 50
+                for(var b=0;b<orderIds.length;b+=50){
+                    var batch=orderIds.slice(b,b+50);
+                    await db.from('scan_history').delete().in('order_id',batch);
+                }
+                await loadScanHistory();
+            }
+        }
+        await db.from('pdf_uploads').delete().eq('id',id);
+        if(openCardId===id)openCardId=null;
+        await loadPdfHistory();
+        setStatus('✅ Deleted (upload + scan history)');
+    }catch(err){setStatus('❌ '+err.message,'error');}};
 window.clearAllUploads=async function(){if(!confirm('Delete ALL upload history?'))return;
     try{await db.from('pdf_uploads').delete().neq('id',0);pdfUploads=[];openCardId=null;renderPdfHistory();setStatus('✅ All cleared');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.clearScanHistory=async function(){
