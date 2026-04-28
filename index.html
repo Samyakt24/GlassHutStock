@@ -1895,7 +1895,15 @@ window.confirmDispatch=async function(){
     productsData.forEach(function(p){
         catToProduct[normName(p.name)]=p.id;
         var base=normName(getBaseProduct(p.name));
-        if(!baseToProduct[base])baseToProduct[base]=p.id;
+        // For merged bases, prefer product that has inventory
+        if(!baseToProduct[base]){
+            baseToProduct[base]=p.id;
+        } else {
+            // Check if this product has more stock
+            var existingStock=inventoryData.filter(function(i){return parseInt(i.product_id)===baseToProduct[base];}).reduce(function(s,i){return s+Math.abs(i.qty);},0);
+            var thisStock=inventoryData.filter(function(i){return parseInt(i.product_id)===parseInt(p.id);}).reduce(function(s,i){return s+Math.abs(i.qty);},0);
+            if(thisStock>existingStock)baseToProduct[base]=p.id;
+        }
     });
     var skuToProduct={};
     var skuToMultiplier={};
