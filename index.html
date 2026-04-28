@@ -2372,8 +2372,21 @@ function renderOrders(){
 function escapeHtml(str){var d=document.createElement('div');d.textContent=str;return d.innerHTML;}
 function normSku(s){return(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
 function findCategory(sku){
-    var exact=skuData.find(function(s){return normSku(s.sku_name)===normSku(sku);});
+    var n=normSku(sku);
+    if(!n)return null;
+    // 1. Exact match
+    var exact=skuData.find(function(s){return normSku(s.sku_name)===n;});
     if(exact)return{category:exact.category};
+    // 2. Label SKU contains stored SKU name (e.g. label="Shri Ganesh 24 Choodi Red Colour", stored="Shri Ganesh 24 Choodi Red")
+    var partial=skuData.find(function(s){var ns=normSku(s.sku_name);return ns.length>=5&&n.indexOf(ns)!==-1;});
+    if(partial)return{category:partial.category};
+    // 3. Stored SKU contains label SKU (e.g. stored="Shri Ganesh 24 Choodi Red Colour", label="Shri Ganesh 24 Choodi Red")
+    var reverse=skuData.find(function(s){var ns=normSku(s.sku_name);return n.length>=5&&ns.indexOf(n)!==-1;});
+    if(reverse)return{category:reverse.category};
+    // 4. Remove numbers/hyphens and try (e.g. "Light Multi-12" vs "Light Multi 12")
+    var clean=n.replace(/[-_]/g,' ').replace(/\s+/g,' ');
+    var cleanMatch=skuData.find(function(s){return normSku(s.sku_name).replace(/[-_]/g,' ').replace(/\s+/g,' ')===clean;});
+    if(cleanMatch)return{category:cleanMatch.category};
     return null;
 }
 function escapeJs(str){return str.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');}
