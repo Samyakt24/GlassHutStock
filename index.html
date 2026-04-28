@@ -761,8 +761,7 @@ window.handlePdfUpload=async function(input){
     try{
         await loadScanHistory();
         await loadSkus();
-        console.log('SKU map loaded:',skuData.length,'entries');
-        skuData.forEach(function(s){console.log('  SKU:',JSON.stringify(s.sku_name),'→',s.category);});        var arrayBuffer=await file.arrayBuffer();
+        var arrayBuffer=await file.arrayBuffer();
         lastPdfData=arrayBuffer.slice(0);
         var pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
         var labels=[];
@@ -2414,19 +2413,18 @@ function findCategory(sku){
     if(exact){return{category:exact.category};}
     // 2. Label SKU contains stored SKU name
     var partial=skuData.find(function(s){var ns=normSku(s.sku_name);return ns.length>=5&&n.indexOf(ns)!==-1;});
-    if(partial){console.log('Partial match:',sku,'→',partial.sku_name);return{category:partial.category};}
+    if(partial){return{category:partial.category};}
     // 3. Stored SKU contains label SKU
     var reverse=skuData.find(function(s){var ns=normSku(s.sku_name);return n.length>=5&&ns.indexOf(n)!==-1;});
-    if(reverse){console.log('Reverse match:',sku,'→',reverse.sku_name);return{category:reverse.category};}
+    if(reverse){return{category:reverse.category};}
     // 4. Remove hyphens/underscores and try
     var clean=n.replace(/[-_]/g,' ').replace(/\s+/g,' ');
     var cleanMatch=skuData.find(function(s){return normSku(s.sku_name).replace(/[-_]/g,' ').replace(/\s+/g,' ')===clean;});
-    if(cleanMatch){console.log('Clean match:',sku,'→',cleanMatch.sku_name);return{category:cleanMatch.category};}
+    if(cleanMatch){return{category:cleanMatch.category};}
     // 5. Remove trailing number (e.g. "Dark Multi-12" → "Dark Multi" matches "Dark Multi 12")
     var noTrailNum=clean.replace(/\s*\d+\s*$/,'').trim();
     var trailMatch=skuData.find(function(s){var ns=normSku(s.sku_name).replace(/[-_]/g,' ').replace(/\s*\d+\s*$/,'').trim();return noTrailNum.length>=5&&ns===noTrailNum;});
-    if(trailMatch){console.log('Trail number match:',sku,'→',trailMatch.sku_name);return{category:trailMatch.category};}
-    console.log('NO MATCH for:',JSON.stringify(sku),'(normalized:',JSON.stringify(n)+')');
+    if(trailMatch){return{category:trailMatch.category};}
     return null;
 }
 function escapeJs(str){return str.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"');}
