@@ -522,9 +522,19 @@ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/p
 
 const CATEGORIES=['Light Multi 24','Light Multi 12','Dark Multi 24','Dark Multi 12','GOLD Multi 24'];
 const CAT_COLORS={'Light Multi 24':'cat-light24','Light Multi 12':'cat-light12','Dark Multi 24':'cat-dark24','Dark Multi 12':'cat-dark12','GOLD Multi 24':'cat-gold24','Uncategorized':'cat-uncategorized'};
-// Pack size helpers: "Light Multi 24" → base "Light Multi", multiplier 2 (24÷12)
-function getBaseProduct(cat){return(cat||'').replace(/\s*\d+\s*$/,'').trim();}
-function getPackMultiplier(cat){var m=(cat||'').match(/(\d+)\s*$/);if(!m)return 1;var n=parseInt(m[1]);return n>=24?2:1;}
+// Pack size helpers - ONLY for Light Multi 12/24 merge
+var MERGE_BASES=['Light Multi']; // Add more here when needed, e.g. 'Dark Multi'
+function getBaseProduct(cat){
+    var base=(cat||'').replace(/\s*\d+\s*$/,'').trim();
+    if(MERGE_BASES.indexOf(base)!==-1)return base;
+    return cat; // Don't merge, return original
+}
+function getPackMultiplier(cat){
+    var base=(cat||'').replace(/\s*\d+\s*$/,'').trim();
+    if(MERGE_BASES.indexOf(base)===-1)return 1; // No multiplier for non-merged
+    var m=(cat||'').match(/(\d+)\s*$/);if(!m)return 1;
+    var n=parseInt(m[1]);return n>=24?2:1;
+}
 // Merge categories by base product
 function mergeCategoryCounts(countByCategory){
     var merged={};
