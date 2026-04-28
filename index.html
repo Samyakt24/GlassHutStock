@@ -522,6 +522,26 @@ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/p
 
 const CATEGORIES=['Light Multi 24','Light Multi 12','Dark Multi 24','Dark Multi 12','GOLD Multi 24'];
 const CAT_COLORS={'Light Multi 24':'cat-light24','Light Multi 12':'cat-light12','Dark Multi 24':'cat-dark24','Dark Multi 12':'cat-dark12','GOLD Multi 24':'cat-gold24','Uncategorized':'cat-uncategorized'};
+// Pack size helpers: "Light Multi 24" → base "Light Multi", multiplier 2 (24÷12)
+function getBaseProduct(cat){return(cat||'').replace(/\s*\d+\s*$/,'').trim();}
+function getPackMultiplier(cat){var m=(cat||'').match(/(\d+)\s*$/);if(!m)return 1;var n=parseInt(m[1]);return n>=24?2:1;}
+// Merge categories by base product
+function mergeCategoryCounts(countByCategory){
+    var merged={};
+    Object.keys(countByCategory).forEach(function(cat){
+        var base=getBaseProduct(cat);
+        var mult=getPackMultiplier(cat);
+        var d=countByCategory[cat];
+        if(!merged[base])merged[base]={count:0,dozens:0,sizes:{},subCats:[]};
+        merged[base].count+=d.count;
+        merged[base].dozens+=(d.count*mult);
+        merged[base].subCats.push(cat+': '+d.count);
+        Object.keys(d.sizes).forEach(function(sz){
+            merged[base].sizes[sz]=(merged[base].sizes[sz]||0)+(d.sizes[sz]*mult);
+        });
+    });
+    return merged;
+}
 const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[];
@@ -811,12 +831,16 @@ window.handlePdfUpload=async function(input){
             countByCategory[cat].sizes[sz]=(countByCategory[cat].sizes[sz]||0)+1;
         });
         if(newLabels.length>0){
-            html+='<div style="font-size:0.8rem;font-weight:600;color:#065f46;margin-bottom:0.4rem">📦 New Labels by Category:</div>';
+            var merged=mergeCategoryCounts(countByCategory);
+            html+='<div style="font-size:0.8rem;font-weight:600;color:#065f46;margin-bottom:0.4rem">📦 New Labels by Product (in dozens):</div>';
             html+='<div class="count-grid" style="margin:0">';
-            allCats.concat(['Uncategorized']).forEach(function(cat){
-                var d=countByCategory[cat];if(!d||d.count===0)return;
-                var bc='#10b981';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
-                html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+cat+'</div><div class="cc-count" style="color:'+bc+'">'+d.count+'</div>';
+            var baseNames=Object.keys(merged).sort();
+            baseNames.forEach(function(base){
+                var d=merged[base];if(!d||d.dozens===0)return;
+                var bc='#10b981';if(base.includes('Light'))bc='#eab308';if(base.includes('Dark'))bc='#818cf8';if(base.includes('GOLD'))bc='#fb923c';if(base==='Uncategorized')bc='#9ca3af';
+                html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+base+'</div>';
+                html+='<div class="cc-count" style="color:'+bc+'">'+d.dozens+'<span style="font-size:0.5rem;color:#6b7280"> dzn</span></div>';
+                html+='<div style="font-size:0.55rem;color:#6b7280;margin-top:0.1rem">('+d.subCats.join(', ')+')</div>';
                 var sizes=Object.keys(d.sizes).sort();
                 if(sizes.length>0){
                     html+='<div style="margin-top:0.3rem;font-size:0.65rem;color:#374151">';
@@ -1034,18 +1058,22 @@ function buildCardDetails(upload){
     if(dupLabels.length>0)html+='<div style="font-size:0.7rem;color:#991b1b;background:#fee2e2;padding:0.25rem 0.6rem;border-radius:8px">🔁 '+dupLabels.length+' already packed (skipped)</div>';
     html+='</div>';
     if(totalPack>0){
+        var mergedPack=mergeCategoryCounts(packCounts);
         html+='<div class="count-grid" style="margin:0">';
-        allCats.concat(['Uncategorized']).forEach(function(cat){
-            var d=packCounts[cat];if(!d||d.count===0)return;
-            var bc='#10b981';if(cat.includes('Light'))bc='#eab308';if(cat.includes('Dark'))bc='#818cf8';if(cat.includes('GOLD'))bc='#fb923c';if(cat==='Uncategorized')bc='#9ca3af';
-            html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+cat+'</div><div class="cc-count" style="color:'+bc+'">'+d.count+'</div>';
+        var baseNames=Object.keys(mergedPack).sort();
+        baseNames.forEach(function(base){
+            var d=mergedPack[base];if(!d||d.dozens===0)return;
+            var bc='#10b981';if(base.includes('Light'))bc='#eab308';if(base.includes('Dark'))bc='#818cf8';if(base.includes('GOLD'))bc='#fb923c';if(base==='Uncategorized')bc='#9ca3af';
+            html+='<div class="count-card" style="border-left-color:'+bc+';background:#fff"><div class="cc-label">'+base+'</div>';
+            html+='<div class="cc-count" style="color:'+bc+'">'+d.dozens+'<span style="font-size:0.5rem;color:#6b7280"> dzn</span></div>';
+            html+='<div style="font-size:0.55rem;color:#6b7280;margin-top:0.1rem">('+d.subCats.join(', ')+')</div>';
             var sizes=Object.keys(d.sizes).sort();
             if(sizes.length>0){
                 html+='<div style="margin-top:0.3rem;font-size:0.65rem;color:#374151">';
                 sizes.forEach(function(sz){html+='<span style="display:inline-block;background:#f3f4f6;border-radius:4px;padding:0.1rem 0.4rem;margin:0.1rem;font-weight:500">'+sz+'" × '+d.sizes[sz]+'</span>';});
                 html+='</div>';
             }
-            html+='<div class="cc-skus">'+d.skus.join(', ')+'</div></div>';
+            html+='</div>';
         });
         html+='</div>';
     }else{
@@ -1841,13 +1869,27 @@ window.confirmDispatch=async function(){
     if(!lastPdfLabels){alert('Upload a label PDF first');return;}
     var newLabels=lastPdfLabels.filter(function(l){return !l.isDuplicate;});
     if(newLabels.length===0){alert('No new labels to dispatch');return;}
-    var skuToProduct={};
-    // Map SKU name → category → product_id
+    // Map category → base product → product_id
     var catToProduct={};
-    productsData.forEach(function(p){catToProduct[p.name.toLowerCase().trim()]=p.id;});
+    var baseToProduct={};
+    productsData.forEach(function(p){
+        catToProduct[p.name.toLowerCase().trim()]=p.id;
+        var base=getBaseProduct(p.name).toLowerCase().trim();
+        if(!baseToProduct[base])baseToProduct[base]=p.id;
+    });
+    var skuToProduct={};
+    var skuToMultiplier={};
     skuData.forEach(function(s){
-        var pid=catToProduct[s.category.toLowerCase().trim()];
-        if(pid)skuToProduct[s.sku_name.trim().toLowerCase()]=pid;
+        var cat=s.category.trim();
+        var catLow=cat.toLowerCase();
+        var baseLow=getBaseProduct(cat).toLowerCase().trim();
+        var mult=getPackMultiplier(cat);
+        // Try exact category match first, then base product match
+        var pid=catToProduct[catLow]||baseToProduct[baseLow];
+        if(pid){
+            skuToProduct[s.sku_name.trim().toLowerCase()]=pid;
+            skuToMultiplier[s.sku_name.trim().toLowerCase()]=mult;
+        }
     });
     var deductions={};
     var unmappedSkus=[];
@@ -1857,9 +1899,11 @@ window.confirmDispatch=async function(){
         if(!pid){if(unmappedSkus.indexOf(l.sku)===-1)unmappedSkus.push(l.sku);return;}
         var size=l.size||'-';
         var qty=l.qty||1;
+        var mult=skuToMultiplier[sku]||1;
         var key=pid+'|||'+size;
-        if(!deductions[key])deductions[key]={product_id:pid,size:size,qty:0};
-        deductions[key].qty+=qty;
+        if(!deductions[key])deductions[key]={product_id:pid,size:size,qty:0,labels:0};
+        deductions[key].qty+=(qty*mult);
+        deductions[key].labels++;
     });
     pendingDeductions=deductions;
     // Show editable dispatch form
@@ -1868,7 +1912,7 @@ window.confirmDispatch=async function(){
     if(unmappedSkus.length>0){
         html+='<div style="background:#edf2f9;padding:0.4rem;border-radius:6px;font-size:0.65rem;color:#1e3a5f;margin-bottom:0.5rem">⚠️ Unmapped: '+unmappedSkus.join(', ')+'</div>';
     }
-    html+='<table style="width:100%;font-size:0.75rem"><thead><tr><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Product</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Size</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">From Labels</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">Dispatch</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">In Stock</th></tr></thead><tbody>';
+    html+='<table style="width:100%;font-size:0.75rem"><thead><tr><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Product</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Size</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">Labels</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">Deduct (dzn)</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">In Stock</th></tr></thead><tbody>';
     var keys=Object.keys(deductions).sort();
     keys.forEach(function(key,idx){
         var d=deductions[key];
@@ -1880,8 +1924,8 @@ window.confirmDispatch=async function(){
         html+='<tr style="border-bottom:1px solid #e2e8f0'+(shortage?';background:#fef2f2':'')+'">';
         html+='<td style="padding:0.3rem;font-weight:600">'+name+'</td>';
         html+='<td style="padding:0.3rem;text-align:center">'+d.size+'"</td>';
-        html+='<td style="padding:0.3rem;text-align:center;color:#6b7280">'+d.qty+'</td>';
-        html+='<td style="padding:0.3rem;text-align:center"><input type="number" id="dispatch-'+idx+'" data-key="'+key+'" value="'+d.qty+'" min="0" max="9999" style="width:50px;text-align:center;border:2px solid '+(shortage?'#fca5a5':'#6ee7b7')+';border-radius:6px;font-weight:700;font-size:0.8rem;padding:0.2rem"></td>';
+        html+='<td style="padding:0.3rem;text-align:center;color:#6b7280">'+(d.labels||d.qty)+'</td>';
+        html+='<td style="padding:0.3rem;text-align:center"><input type="number" id="dispatch-'+idx+'" data-key="'+key+'" value="'+d.qty+'" style="width:50px;text-align:center;border:2px solid '+(shortage?'#fca5a5':'#6ee7b7')+';border-radius:6px;font-weight:700;font-size:0.8rem;padding:0.2rem"></td>';
         html+='<td style="padding:0.3rem;text-align:center;font-weight:600;color:'+(shortage?'#dc2626':'#059669')+'">'+available+'</td>';
         html+='</tr>';
     });
