@@ -1110,15 +1110,9 @@ function buildCardDetails(upload){
     html+='</div>';
     // Action buttons inside card
     if(totalPack>0){
-        html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;align-items:center">';
-        html+='<span style="font-size:0.65rem;font-weight:700;color:#1e3a5f">Step 1:</span>';
-        html+='<button class="btn btn-primary btn-sm" onclick="useCardLabels('+upload.id+');downloadSortedPdf(false)" style="font-size:0.7rem">📥 Download New Only</button>';
-        html+='<button class="btn btn-sm" onclick="useCardLabels('+upload.id+');downloadSortedPdf(true)" style="font-size:0.7rem;background:#e2e8f0;color:#1e3a5f">📥 Download All</button>';
-        if(!lastPdfData)html+='<span style="font-size:0.6rem;color:#c9963b;align-self:center">💡 Re-upload same PDF to enable download</span>';
-        html+='</div>';
-        html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center;padding-top:0.4rem;border-top:1px dashed #c5cfe0">';
-        html+='<span style="font-size:0.65rem;font-weight:700;color:#1e3a5f">Step 2:</span>';
+        html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center">';
         html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button>';
+        html+='<span style="font-size:0.6rem;color:#6b7280">💡 To download sorted PDF, re-upload the PDF file above</span>';
         html+='</div>';
     }
     // SKU × QTY Packing List
@@ -1923,72 +1917,44 @@ window.undoLastDispatch=async function(){
         alert('❌ Undo failed: '+err.message);
     }
 };
-var pendingDeductions=null;
 window.confirmDispatch=async function(){
     if(!lastPdfLabels||lastPdfLabels.length===0){alert('Upload a label PDF first');return;}
-    // If loaded from card (useCardLabels), use all labels; if fresh upload, filter duplicates
     var newLabels=lastPdfLabels._fromCard?lastPdfLabels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}):lastPdfLabels.filter(function(l){return !l.isDuplicate;});
     if(newLabels.length===0){alert('No labels to dispatch');return;}
-    if(!confirm('📦 Confirm Dispatch?\n\n'+newLabels.length+' labels will be dispatched.\nStock will be deducted.\n\nAre you sure?'))return;
-    // Map category → base product → product_id (lenient matching)
+    // Map SKU → Product
     var catToProduct={};
     var baseToProduct={};
     function normName(n){return(n||'').toLowerCase().replace(/[-_]/g,' ').replace(/\s+/g,' ').trim();}
     productsData.forEach(function(p){
         catToProduct[normName(p.name)]=p.id;
         var base=normName(getBaseProduct(p.name));
-        // For merged bases, prefer product that has inventory
         if(!baseToProduct[base]){
             baseToProduct[base]=p.id;
         } else {
-            // Check if this product has more stock
             var existingStock=inventoryData.filter(function(i){return parseInt(i.product_id)===baseToProduct[base];}).reduce(function(s,i){return s+Math.abs(i.qty);},0);
             var thisStock=inventoryData.filter(function(i){return parseInt(i.product_id)===parseInt(p.id);}).reduce(function(s,i){return s+Math.abs(i.qty);},0);
             if(thisStock>existingStock)baseToProduct[base]=p.id;
         }
     });
-    var skuToProduct={};
-    var skuToMultiplier={};
+    var skuToProduct={},skuToMultiplier={};
     skuData.forEach(function(s){
         var cat=s.category.trim();
         var catNorm=normName(cat);
         var baseNorm=normName(getBaseProduct(cat));
         var mult=getPackMultiplier(cat);
-        // Check alias first
         var aliasTarget=CATEGORY_ALIAS[catNorm];
         var pid=null;
         if(aliasTarget)pid=catToProduct[normName(aliasTarget)]||baseToProduct[normName(aliasTarget)];
-        // For merged categories (e.g. Light Multi), ALWAYS use baseToProduct (picks one with stock)
-        if(!pid&&MERGE_BASES.indexOf(getBaseProduct(cat))!==-1){
-            pid=baseToProduct[baseNorm];
-        }
-        // Then try exact → base → partial match
+        if(!pid&&MERGE_BASES.indexOf(getBaseProduct(cat))!==-1)pid=baseToProduct[baseNorm];
         if(!pid)pid=catToProduct[catNorm]||baseToProduct[baseNorm];
-        // Fallback: find product whose normalized name contains category base or vice versa
-        if(!pid){
-            var found=productsData.find(function(p){
-                var pn=normName(p.name);
-                return pn.indexOf(baseNorm)!==-1||baseNorm.indexOf(pn)!==-1;
-            });
-            if(found)pid=found.id;
-        }
-        if(pid){
-            skuToProduct[normSku(s.sku_name)]=pid;
-            skuToMultiplier[normSku(s.sku_name)]=mult;
-        }
+        if(!pid){var found=productsData.find(function(p){var pn=normName(p.name);return pn.indexOf(baseNorm)!==-1||baseNorm.indexOf(pn)!==-1;});if(found)pid=found.id;}
+        if(pid){skuToProduct[normSku(s.sku_name)]=pid;skuToMultiplier[normSku(s.sku_name)]=mult;}
     });
-    var deductions={};
-    var unmappedSkus=[];
+    var deductions={},unmappedSkus=[];
     newLabels.forEach(function(l){
         var sku=normSku(l.sku);
         var pid=skuToProduct[sku];
-        // Fallback: try partial match
-        if(!pid){
-            var skuKeys=Object.keys(skuToProduct);
-            for(var si=0;si<skuKeys.length;si++){
-                if(sku.indexOf(skuKeys[si])!==-1||skuKeys[si].indexOf(sku)!==-1){pid=skuToProduct[skuKeys[si]];break;}
-            }
-        }
+        if(!pid){var skuKeys=Object.keys(skuToProduct);for(var si=0;si<skuKeys.length;si++){if(sku.indexOf(skuKeys[si])!==-1||skuKeys[si].indexOf(sku)!==-1){pid=skuToProduct[skuKeys[si]];break;}}}
         if(!pid){if(unmappedSkus.indexOf(l.sku)===-1)unmappedSkus.push(l.sku);return;}
         var size=l.size||'-';
         var qty=l.qty||1;
@@ -1998,105 +1964,58 @@ window.confirmDispatch=async function(){
         deductions[key].qty+=(qty*mult);
         deductions[key].labels++;
     });
-    pendingDeductions=deductions;
-    var mappedCount=newLabels.length-unmappedSkus.reduce(function(total,sku){return total+newLabels.filter(function(l){return l.sku===sku;}).length;},0);
-    // Show editable dispatch form
-    var html='<div id="dispatchForm" style="background:#f8f9fd;border:2px solid #c5cfe0;border-radius:12px;padding:1rem;margin-top:0.5rem">';
-    html+='<div style="font-weight:700;font-size:0.9rem;color:#1e3a5f;margin-bottom:0.5rem">📦 Dispatch — '+mappedCount+'/'+newLabels.length+' labels mapped to products</div>';
-    if(unmappedSkus.length>0){
-        html+='<div style="background:#fef2f2;padding:0.4rem;border-radius:6px;font-size:0.65rem;color:#991b1b;margin-bottom:0.5rem">⚠️ <b>'+unmappedSkus.length+' SKU(s) unmapped</b> (not deducted): '+unmappedSkus.join(', ')+'</div>';
-    }
     if(Object.keys(deductions).length===0){
-        html+='<div style="background:#fef2f2;padding:0.75rem;border-radius:6px;font-size:0.8rem;color:#dc2626;text-align:center;margin-bottom:0.5rem">❌ No products matched! Check SKU tab mappings and Stock tab products.</div>';
-        html+='</div>';
-        document.getElementById('pdfStatus').innerHTML+=html;
+        alert('❌ No products matched! Check SKU tab mappings and Stock tab products.');
         return;
     }
-    html+='<table style="width:100%;font-size:0.75rem"><thead><tr><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Product</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b">Size</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">Labels</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">Deduct (dzn)</th><th style="padding:0.3rem;border-bottom:2px solid #c9963b;text-align:center">In Stock</th></tr></thead><tbody>';
+    // Build preview for confirm dialog
+    var previewLines=[];
     var keys=Object.keys(deductions).sort();
-    keys.forEach(function(key,idx){
+    keys.forEach(function(key){
         var d=deductions[key];
-        var prodName=productsData.find(function(p){return p.id===d.product_id;});
-        var name=prodName?prodName.name:'Unknown';
+        var prod=productsData.find(function(p){return p.id===d.product_id;});
+        var name=prod?prod.name:'Unknown';
         var inv=inventoryData.find(function(i){return parseInt(i.product_id)===parseInt(d.product_id)&&i.size===d.size;});
-        var available=inv?inv.qty:0;
-        var shortage=available<d.qty;
-        html+='<tr style="border-bottom:1px solid #e2e8f0'+(shortage?';background:#fef2f2':'')+'">';
-        html+='<td style="padding:0.3rem;font-weight:600">'+name+'</td>';
-        html+='<td style="padding:0.3rem;text-align:center">'+d.size+'"</td>';
-        html+='<td style="padding:0.3rem;text-align:center;color:#6b7280">'+(d.labels||d.qty)+'</td>';
-        html+='<td style="padding:0.3rem;text-align:center"><input type="number" id="dispatch-'+idx+'" data-key="'+key+'" value="'+d.qty+'" style="width:50px;text-align:center;border:2px solid '+(shortage?'#fca5a5':'#6ee7b7')+';border-radius:6px;font-weight:700;font-size:0.8rem;padding:0.2rem"></td>';
-        html+='<td style="padding:0.3rem;text-align:center;font-weight:600;color:'+(shortage?'#dc2626':'#059669')+'">'+available+'</td>';
-        html+='</tr>';
+        var before=inv?inv.qty:0;
+        previewLines.push(name+' '+d.size+'" : '+before+' → '+(before-d.qty)+' (-'+d.qty+' dzn)');
     });
-    html+='</tbody></table>';
-    html+='<div style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.75rem">';
-    html+='<button class="btn btn-outline btn-sm" onclick="cancelDispatch()" style="font-size:0.7rem">❌ Cancel</button>';
-    html+='<button class="btn btn-success btn-sm" onclick="executeDispatch()" style="font-size:0.7rem">✅ Confirm & Deduct Stock</button>';
-    html+='</div></div>';
-    document.getElementById('pdfStatus').innerHTML+=html;
-    // Scroll to dispatch form
-    var dForm=document.getElementById('dispatchForm');
-    if(dForm)dForm.scrollIntoView({behavior:'smooth',block:'start'});
-};
-window.cancelDispatch=function(){
-    pendingDeductions=null;
-    var form=document.getElementById('dispatchForm');
-    if(form)form.remove();
-};
-window.executeDispatch=async function(){
-    if(!pendingDeductions)return;
-    if(!confirm('✅ Confirm & Deduct Stock?\n\nThis will update your inventory. Are you sure?'))return;
-    // Save backup for undo
-    inventoryBackup={
-        timestamp:new Date().toISOString(),
-        data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})
-    };
-    var keys=Object.keys(pendingDeductions);
+    var msg='📦 Confirm Dispatch?\n\n'+newLabels.length+' labels, '+keys.length+' products:\n\n'+previewLines.join('\n');
+    if(unmappedSkus.length>0)msg+='\n\n⚠️ Unmapped: '+unmappedSkus.join(', ');
+    msg+='\n\nDeduct stock now?';
+    if(!confirm(msg))return;
+    // Save backup
+    inventoryBackup={timestamp:new Date().toISOString(),data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})};
+    // Deduct stock
     setStatus('Deducting stock...','syncing');
-    var updated=0,total=0;
-    var summary=[];
+    var updated=0,total=0,summary=[];
     for(var idx=0;idx<keys.length;idx++){
-        var input=document.getElementById('dispatch-'+idx);
-        if(!input)continue;
-        var actualQty=parseInt(input.value)||0;
+        var d=deductions[keys[idx]];
+        var actualQty=d.qty;
         if(actualQty<=0)continue;
         total+=actualQty;
-        var d=pendingDeductions[input.dataset.key];
         var prodName=productsData.find(function(p){return p.id===d.product_id;});
         var inv=inventoryData.find(function(i){return parseInt(i.product_id)===parseInt(d.product_id)&&i.size===d.size;});
         var before=inv?inv.qty:0;
         var after=before-actualQty;
         summary.push({name:prodName?prodName.name:'Unknown',size:d.size,before:before,deducted:actualQty,after:after});
         try{
-            if(inv){
-                await db.from('inventory').update({qty:after}).eq('id',inv.id);
-                updated++;
-            } else {
-                await db.from('inventory').insert({product_id:d.product_id,size:d.size,qty:-actualQty});
-                updated++;
-            }
+            if(inv){await db.from('inventory').update({qty:after}).eq('id',inv.id);updated++;}
+            else{await db.from('inventory').insert({product_id:d.product_id,size:d.size,qty:-actualQty});updated++;}
         }catch(e){console.error('Deduct error:',e);}
     }
-    pendingDeductions=null;
     await loadInventory();
-    // Save to scan_history for duplicate detection (only on actual dispatch)
+    // Save to scan_history
     if(lastPdfLabels){
         var newToSave=lastPdfLabels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
         if(newToSave.length>0){
             var today=new Date().toISOString().split('T')[0];
             var ins=newToSave.map(function(l){return{order_id:l.orderId,sku:l.sku,scanned_date:today};});
-            for(var b=0;b<ins.length;b+=50){
-                var batch=ins.slice(b,b+50);
-                try{await db.from('scan_history').insert(batch);}catch(e){}
-            }
+            for(var b=0;b<ins.length;b+=50){try{await db.from('scan_history').insert(ins.slice(b,b+50));}catch(e){}}
             await loadScanHistory();
         }
     }
-    setStatus('✅ Dispatched! '+total+' dzn deducted from '+updated+' entries');
-    var form=document.getElementById('dispatchForm');
-    if(form)form.remove();
-    // Show dispatch summary
+    setStatus('✅ Dispatched! '+total+' dzn deducted');
+    // Show summary
     var sumHtml='<div style="background:#f0fdf4;border:2px solid #6ee7b7;border-radius:10px;padding:0.75rem;margin-top:0.5rem">';
     sumHtml+='<div style="font-weight:700;color:#065f46;font-size:0.85rem;margin-bottom:0.5rem">✅ Dispatch Complete — '+total+' dzn deducted</div>';
     sumHtml+='<table style="width:100%;font-size:0.7rem"><thead><tr><th style="text-align:left;padding:0.25rem;border-bottom:2px solid #059669">Product</th><th style="padding:0.25rem;border-bottom:2px solid #059669">Size</th><th style="padding:0.25rem;border-bottom:2px solid #059669;text-align:center">Before</th><th style="padding:0.25rem;border-bottom:2px solid #059669;text-align:center">Deducted</th><th style="padding:0.25rem;border-bottom:2px solid #059669;text-align:center">After</th></tr></thead><tbody>';
@@ -2104,7 +2023,9 @@ window.executeDispatch=async function(){
         var afterColor=s.after<0?'#dc2626':s.after<=10?'#c9963b':'#059669';
         sumHtml+='<tr style="border-bottom:1px solid #e2e8f0"><td style="padding:0.25rem;font-weight:600">'+s.name+'</td><td style="padding:0.25rem;text-align:center">'+s.size+'"</td><td style="padding:0.25rem;text-align:center;color:#6b7280">'+s.before+'</td><td style="padding:0.25rem;text-align:center;color:#dc2626;font-weight:700">-'+s.deducted+'</td><td style="padding:0.25rem;text-align:center;color:'+afterColor+';font-weight:700">'+s.after+'</td></tr>';
     });
-    sumHtml+='</tbody></table></div>';
+    sumHtml+='</tbody></table>';
+    if(unmappedSkus.length>0)sumHtml+='<div style="font-size:0.6rem;color:#991b1b;margin-top:0.3rem">⚠️ Unmapped: '+unmappedSkus.join(', ')+'</div>';
+    sumHtml+='</div>';
     document.getElementById('pdfStatus').innerHTML+=sumHtml;
 };
 function renderInventory(){
