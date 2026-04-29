@@ -2035,6 +2035,9 @@ window.confirmDispatch=async function(){
     html+='<button class="btn btn-success btn-sm" onclick="executeDispatch()" style="font-size:0.7rem">✅ Confirm & Deduct Stock</button>';
     html+='</div></div>';
     document.getElementById('pdfStatus').innerHTML+=html;
+    // Scroll to dispatch form
+    var dForm=document.getElementById('dispatchForm');
+    if(dForm)dForm.scrollIntoView({behavior:'smooth',block:'start'});
 };
 window.cancelDispatch=function(){
     pendingDeductions=null;
