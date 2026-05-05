@@ -1111,8 +1111,8 @@ function buildCardDetails(upload){
     // Action buttons inside card
     if(totalPack>0){
         html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center">';
-        html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch (deduct stock)</button>';
-        html+='<span style="font-size:0.6rem;color:#6b7280">💡 To download sorted PDF, re-upload the PDF file above</span>';
+        html+='<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf(true)" style="font-size:0.7rem">📥 Download Sorted PDF</button>';
+        html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch</button>';
         html+='</div>';
     }
     // SKU × QTY Packing List
