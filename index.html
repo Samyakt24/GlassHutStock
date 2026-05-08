@@ -559,7 +559,7 @@ function mergeCategoryCounts(countByCategory){
 }
 const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[];
+let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[],inventoryHistoryData=[];
 var inventoryBackup=null; // Stores last inventory state for undo
 let platform='meesho',filterPlat='all',filterStatus='all',currentUser=null;
 let openMonthKey=null;
@@ -693,7 +693,8 @@ async function loadScanHistory(){try{
 }catch(err){scanHistory=[];return true;}}
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
 async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
-async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();renderProducts();renderDashboard();return true;}catch(err){inventoryData=[];return true;}}
+async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];await loadInventoryHistory();renderInventory();renderProducts();renderDashboard();return true;}catch(err){inventoryData=[];return true;}}
+async function loadInventoryHistory(){try{var twoDaysAgo=new Date();twoDaysAgo.setDate(twoDaysAgo.getDate()-2);var dateStr=twoDaysAgo.toISOString().split('T')[0];var r=await db.from('inventory_history').select('*').gte('changed_at',dateStr).order('changed_at',{ascending:false});if(r.error){inventoryHistoryData=[];return;}inventoryHistoryData=r.data||[];}catch(err){inventoryHistoryData=[];}}
 async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();if(s&&o)setStatus('✅ Connected');}
 
 // SKU CRUD
@@ -1867,8 +1868,9 @@ window.addInventory=async function(){
     // Check if exists
     var existing=inventoryData.find(function(i){return i.product_id===parseInt(pid)&&i.size===size;});
     try{
+        var newQty=qty;
         if(existing){
-            var newQty=existing.qty+qty;
+            newQty=existing.qty+qty;
             var res=await db.from('inventory').update({qty:newQty}).eq('id',existing.id).select();
             if(res.error)throw new Error(res.error.message);
             setStatus('✅ Stock updated: +'+qty);
@@ -1877,6 +1879,8 @@ window.addInventory=async function(){
             if(res.error)throw new Error(res.error.message);
             setStatus('✅ Stock added');
         }
+        // Save to history
+        try{await db.from('inventory_history').insert({product_id:parseInt(pid),size:size,qty:newQty,changed_at:new Date().toISOString().split('T')[0]});}catch(he){}
         document.getElementById('inv-qty').value='';
         await loadInventory();
     }catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message);}
@@ -1885,9 +1889,17 @@ window.updateInventoryQty=async function(id,val){
     // Save backup before manual edit
     if(!inventoryBackup)inventoryBackup={timestamp:new Date().toISOString(),data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})};
     try{
-        var res=await db.from('inventory').update({qty:parseInt(val)||0}).eq('id',id).select();
+        var newQty=parseInt(val)||0;
+        var res=await db.from('inventory').update({qty:newQty}).eq('id',id).select();
         if(res.error)throw new Error(res.error.message);
-        inventoryData.forEach(function(i){if(i.id===id)i.qty=parseInt(val)||0;});
+        var invItem=inventoryData.find(function(i){return i.id===id;});
+        if(invItem){
+            invItem.qty=newQty;
+            // Save to history
+            try{await db.from('inventory_history').insert({product_id:invItem.product_id,size:invItem.size,qty:newQty,changed_at:new Date().toISOString().split('T')[0]});}catch(he){}
+        }
+        await loadInventoryHistory();
+        renderInventory();
         setStatus('✅ Updated');
     }catch(err){setStatus('❌ '+err.message,'error');}
 };
@@ -2092,9 +2104,25 @@ function renderInventory(){
             html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.25rem">';
             g.items.forEach(function(inv){
                 var qtyColor=inv.qty<0?'#dc2626':inv.qty===0?'#9ca3af':inv.qty<=10?'#c9963b':'#059669';
+                // Get last 2 days history for this size
+                var invHist=inventoryHistoryData.filter(function(h){return parseInt(h.product_id)===parseInt(inv.product_id)&&h.size===inv.size;});
+                var histByDate={};
+                invHist.forEach(function(h){if(!histByDate[h.changed_at])histByDate[h.changed_at]=h;});
+                var histDates=Object.keys(histByDate).sort().reverse().slice(0,2);
+                var HM=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
                 html+='<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
                 html+='<div style="font-size:0.6rem;color:#6b7280">'+inv.size+'"</div>';
                 html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #c5cfe0;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem">';
+                if(histDates.length>0){
+                    html+='<div style="margin-top:0.3rem;border-top:1px dashed #e5e7eb;padding-top:0.2rem">';
+                    histDates.forEach(function(dt){
+                        var h=histByDate[dt];
+                        var d=new Date(dt+'T00:00:00');
+                        var lbl=d.getDate()+' '+HM[d.getMonth()];
+                        html+='<div style="font-size:0.5rem;color:#6b7280;white-space:nowrap;line-height:1.5">📅 '+lbl+': <b style="color:#374151">'+h.qty+'</b></div>';
+                    });
+                    html+='</div>';
+                }
                 html+='<div style="margin-top:0.2rem"><button class="act-btn del" onclick="delInventory('+inv.id+')" style="font-size:0.5rem">🗑️</button></div>';
                 html+='</div>';
             });
