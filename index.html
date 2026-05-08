@@ -694,7 +694,7 @@ async function loadScanHistory(){try{
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
 async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
 async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];await loadInventoryHistory();renderInventory();renderProducts();renderDashboard();return true;}catch(err){inventoryData=[];return true;}}
-async function loadInventoryHistory(){try{var twoDaysAgo=new Date();twoDaysAgo.setDate(twoDaysAgo.getDate()-2);var dateStr=twoDaysAgo.toISOString().split('T')[0];var r=await db.from('inventory_history').select('*').gte('changed_at',dateStr).order('changed_at',{ascending:false});if(r.error){inventoryHistoryData=[];return;}inventoryHistoryData=r.data||[];}catch(err){inventoryHistoryData=[];}}
+async function loadInventoryHistory(){try{var r=await db.from('inventory_history').select('*').order('changed_at',{ascending:false}).limit(1000);if(r.error){inventoryHistoryData=[];return;}inventoryHistoryData=r.data||[];}catch(e){inventoryHistoryData=[];}}
 async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();if(s&&o)setStatus('✅ Connected');}
 
 // SKU CRUD
@@ -1888,10 +1888,9 @@ window.updateInventoryQty=async function(id,val){
         var newQty=parseInt(val)||0;
         var res=await db.from('inventory').update({qty:newQty}).eq('id',id).select();
         if(res.error)throw new Error(res.error.message);
-        var invItem=inventoryData.find(function(i){return i.id===id;});
-        if(invItem){invItem.qty=newQty;
-            try{await db.from('inventory_history').insert({product_id:invItem.product_id,size:invItem.size,qty:newQty,changed_at:new Date().toISOString().split('T')[0]});}catch(he){}
-        }
+        var inv=inventoryData.find(function(i){return i.id===id;});
+        if(inv){inv.qty=newQty;try{await db.from('inventory_history').insert({product_id:inv.product_id,size:inv.size,qty:newQty,changed_at:new Date().toISOString().split('T')[0]});}catch(he){}}
+        await loadInventory();
         setStatus('✅ Updated');
     }catch(err){setStatus('❌ '+err.message,'error');}
 };
@@ -2005,8 +2004,7 @@ window.confirmDispatch=async function(){
         try{
             if(inv){await db.from('inventory').update({qty:after}).eq('id',inv.id);updated++;}
             else{await db.from('inventory').insert({product_id:d.product_id,size:d.size,qty:-actualQty});updated++;}
-            // Save history
-            try{await db.from('inventory_history').insert({product_id:d.product_id,size:d.size,qty:after,changed_at:new Date().toISOString().split('T')[0]});}catch(he){}
+            try{await db.from('inventory_history').insert({product_id:d.product_id,size:d.size,qty:after,changed_at:new Date().toISOString().split('T')[0]});}catch(he){console.warn('hist:',he);}
         }catch(e){console.error('Deduct error:',e);}
     }
     await loadInventory();
@@ -2098,27 +2096,28 @@ function renderInventory(){
             html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.25rem">';
             g.items.forEach(function(inv){
                 var qtyColor=inv.qty<0?'#dc2626':inv.qty===0?'#9ca3af':inv.qty<=10?'#c9963b':'#059669';
-                // Build history for this inv item
-                var HM2=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                var qtyBg=inv.qty<0?'#fef2f2':inv.qty<=10?'#fffbeb':'#f0fdf4';
+                // History for this size
+                var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
                 var iHist=(inventoryHistoryData||[]).filter(function(h){return parseInt(h.product_id)===parseInt(inv.product_id)&&h.size===inv.size;});
-                var histByDate2={};
-                iHist.forEach(function(h){if(!histByDate2[h.changed_at])histByDate2[h.changed_at]=h;});
-                var histDates2=Object.keys(histByDate2).sort().reverse().slice(0,2);
-                var iHistHtml='';
-                if(histDates2.length>0){
-                    iHistHtml='<div style="font-size:0.5rem;color:#6b7280;margin-top:0.2rem;line-height:1.6">';
-                    histDates2.forEach(function(dt){
-                        var h=histByDate2[dt];
-                        var d2=new Date(dt+'T00:00:00');
-                        var lbl2=d2.getDate()+' '+HM2[d2.getMonth()];
-                        iHistHtml+='<div>📅'+lbl2+':<b style="color:#374151"> '+h.qty+'</b></div>';
+                var seenDates={};var histRows=[];
+                iHist.forEach(function(h){if(!seenDates[h.changed_at]){seenDates[h.changed_at]=true;histRows.push(h);}});
+                histRows=histRows.slice(0,3);
+                var histHtml='';
+                if(histRows.length>0){
+                    histHtml='<div style="font-size:0.48rem;color:#6b7280;margin-top:0.25rem;line-height:1.8;text-align:left">';
+                    histRows.forEach(function(h){
+                        var d=new Date(h.changed_at+'T00:00:00');
+                        var lbl=d.getDate()+' '+MN[d.getMonth()];
+                        var hColor=h.qty<0?'#dc2626':h.qty<=10?'#c9963b':'#059669';
+                        histHtml+='<div>📅'+lbl+': <b style="color:'+hColor+'">'+h.qty+'</b></div>';
                     });
-                    iHistHtml+='</div>';
+                    histHtml+='</div>';
                 }
-                html+='<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
+                html+='<div style="background:'+qtyBg+';border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
                 html+='<div style="font-size:0.6rem;color:#6b7280">'+inv.size+'"</div>';
-                html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #c5cfe0;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem">';
-                html+=iHistHtml;
+                html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid '+(inv.qty<0?'#fca5a5':'#c5cfe0')+';border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem">';
+                html+=histHtml;
                 html+='<div style="margin-top:0.2rem"><button class="act-btn del" onclick="delInventory('+inv.id+')" style="font-size:0.5rem">🗑️</button></div>';
                 html+='</div>';
             });
