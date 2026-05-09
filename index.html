@@ -338,10 +338,15 @@
                 <div class="form-box">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap">
                         <h4 style="margin:0">🕒 Dispatch History by Category</h4>
-                        <button class="btn btn-danger btn-sm" onclick="clearDispatchStockHistory()" style="font-size:0.65rem">🗑️ Clear History</button>
+                        <button class="btn btn-danger btn-sm" disabled style="font-size:0.65rem;opacity:0.6;cursor:not-allowed">🗑️ Clear History</button>
                     </div>
-                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Shows stock deduction entries for the last 2 days: date, category, size, change and remaining count.</p>
+                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Manual stock update is active. Dispatch button is hidden.</p>
                     <div id="stockDispatchHistoryByCategory"><div class="loading">Loading history...</div></div>
+                </div>
+                <div class="form-box">
+                    <h4>📄 Label Upload History Cards</h4>
+                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Same history cards from Labels tab, available here in Stock tab.</p>
+                    <div id="stockPdfHistoryList"></div>
                 </div>
             </div>
             
@@ -591,7 +596,7 @@ async function doLogout(){
     currentUser=null;
     // Clear all local data to prevent stale state on next login
     stockData=[];ordersData=[];skuData=[];scanHistory=[];expensesData=[];productsData=[];inventoryData=[];
-    lastPdf={data:null,labels:null,fileName:null,fromCard:false};
+    lastPdf={data:null,labels:null,fileName:null,fromCard:false,uploadTs:null};
     pdfUploads=[];openCardId=null;openMonthKey=null;inventoryBackup=null;
     document.getElementById('loginPage').classList.remove('hide');
     document.getElementById('appContainer').classList.remove('show');
@@ -836,7 +841,7 @@ async function loadPdfHistory(){
         renderDispatchHistoryByCategory();
     }catch(err){pdfUploads=[];renderPdfHistory();renderDispatchHistoryByCategory();}}
 
-var lastPdf={data:null,labels:null,fileName:null,fromCard:false};
+var lastPdf={data:null,labels:null,fileName:null,fromCard:false,uploadTs:null};
 window.handlePdfUpload=async function(input){
     var file=input.files[0];if(!file)return;
     var statusDiv=document.getElementById('pdfStatus');
@@ -847,6 +852,8 @@ window.handlePdfUpload=async function(input){
         await loadSkus();
         var arrayBuffer=await file.arrayBuffer();
         lastPdf.data=arrayBuffer.slice(0);
+        lastPdf.fromCard=false;
+        lastPdf.uploadTs=new Date().toISOString();
         var pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
         var labels=[];
         for(var i=1;i<=pdf.numPages;i++){
@@ -928,7 +935,7 @@ window.handlePdfUpload=async function(input){
         html+='<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px dashed #c5cfe0;display:flex;gap:0.5rem;align-items:center">';
         html+='<span style="font-size:0.7rem;font-weight:700;color:#1e3a5f">Step 2:</span>';
         html+='<span style="font-size:0.7rem;color:#6b7280">Check stock → Print labels → Then:</span>';
-        html+='<button class="btn btn-success" onclick="confirmDispatch()" style="font-size:0.8rem;padding:0.5rem 1rem">✅ Confirm Dispatch (deduct stock)</button>';
+        // html+='<button class="btn btn-success" onclick="confirmDispatch(true)" style="font-size:0.8rem;padding:0.5rem 1rem">⚡ Automatic Dispatch</button>';
         html+='</div></div>';
         // Save upload history
         var upload={name:file.name,labels:labels,newCount:newLabels.length,dupCount:dupLabels.length};
@@ -1024,6 +1031,7 @@ window.useCardLabels=function(uploadId){
         lastPdf.data=null; // Card labels don't have raw PDF data
         lastPdf.fromCard=true;
         lastPdf.fileName=upload.name||'card-labels';
+        lastPdf.uploadTs=upload.sortTs||null;
         setStatus('📋 Loaded '+upload.labels.length+' labels from history card');
     }
 };
@@ -1058,8 +1066,15 @@ window.clearScanHistory=async function(){
 };
 
 function renderPdfHistory(){
-    var container=document.getElementById('pdfHistoryList');
-    if(pdfUploads.length===0){container.innerHTML='<div class="empty">No PDFs uploaded yet. Upload one above!</div>';return;}
+    var labelsContainer=document.getElementById('pdfHistoryList');
+    var stockContainer=document.getElementById('stockPdfHistoryList');
+    if(!labelsContainer&&!stockContainer)return;
+    if(pdfUploads.length===0){
+        var emptyHtml='<div class="empty">No PDFs uploaded yet. Upload one above!</div>';
+        if(labelsContainer)labelsContainer.innerHTML=emptyHtml;
+        if(stockContainer)stockContainer.innerHTML=emptyHtml;
+        return;
+    }
     var html='';
     pdfUploads.forEach(function(u){
         var isOpen=openCardId===u.id;
@@ -1078,7 +1093,8 @@ function renderPdfHistory(){
         if(isOpen)html+=buildCardDetails(u);
         html+='</div></div>';
     });
-    container.innerHTML=html;
+    if(labelsContainer)labelsContainer.innerHTML=html;
+    if(stockContainer)stockContainer.innerHTML=html;
 }
 
 function loadDispatchStockHistory(){
@@ -1245,7 +1261,7 @@ function buildCardDetails(upload){
     if(totalPack>0){
         html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center">';
         html+='<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf(true)" style="font-size:0.7rem">📥 Download Sorted PDF</button>';
-        html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch</button>';
+        // html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch(true)" style="font-size:0.7rem">⚡ Automatic Dispatch</button>';
         html+='</div>';
     }
     // SKU × QTY Packing List
@@ -2061,7 +2077,7 @@ window.undoLastDispatch=async function(){
         alert('❌ Undo failed: '+err.message);
     }
 };
-window.confirmDispatch=async function(){
+window.confirmDispatch=async function(autoMode){
     if(!lastPdf.labels||lastPdf.labels.length===0){alert('Upload a label PDF first');return;}
     var newLabels=lastPdf.fromCard?lastPdf.labels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}):lastPdf.labels.filter(function(l){return !l.isDuplicate;});
     if(newLabels.length===0){alert('No labels to dispatch');return;}
@@ -2123,16 +2139,19 @@ window.confirmDispatch=async function(){
         var before=inv?inv.qty:0;
         previewLines.push(name+' '+d.size+'" : '+before+' → '+(before-d.qty)+' (-'+d.qty+' dzn)');
     });
-    var msg='📦 Confirm Dispatch?\n\n'+newLabels.length+' labels, '+keys.length+' products:\n\n'+previewLines.join('\n');
-    if(unmappedSkus.length>0)msg+='\n\n⚠️ Unmapped: '+unmappedSkus.join(', ');
-    msg+='\n\nDeduct stock now?';
-    if(!confirm(msg))return;
+    if(!autoMode){
+        var msg='📦 Confirm Dispatch?\n\n'+newLabels.length+' labels, '+keys.length+' products:\n\n'+previewLines.join('\n');
+        if(unmappedSkus.length>0)msg+='\n\n⚠️ Unmapped: '+unmappedSkus.join(', ');
+        msg+='\n\nDeduct stock now?';
+        if(!confirm(msg))return;
+    }
     // Save backup
     inventoryBackup={timestamp:new Date().toISOString(),data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})};
     // Deduct stock
     setStatus('Deducting stock...','syncing');
     var updated=0,total=0,summary=[];
     var dispatchedAtIso=new Date().toISOString();
+    var historyTs=lastPdf.uploadTs||dispatchedAtIso;
     for(var idx=0;idx<keys.length;idx++){
         var d=deductions[keys[idx]];
         var actualQty=d.qty;
@@ -2151,7 +2170,7 @@ window.confirmDispatch=async function(){
     if(summary.length>0){
         var histEntries=summary.map(function(s){
             return{
-                ts:dispatchedAtIso,
+                ts:historyTs,
                 category:s.name||'Uncategorized',
                 size:s.size||'-',
                 change:-(s.deducted||0),
