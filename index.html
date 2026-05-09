@@ -338,9 +338,9 @@
                 <div class="form-box">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap">
                         <h4 style="margin:0">🕒 Dispatch History by Category</h4>
-                        <button class="btn btn-danger btn-sm" onclick="clearAllUploads()" style="font-size:0.65rem">🗑️ Clear History</button>
+                        <button class="btn btn-danger btn-sm" onclick="clearDispatchStockHistory()" style="font-size:0.65rem">🗑️ Clear History</button>
                     </div>
-                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Shows packed labels grouped by category with dispatch dates.</p>
+                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Shows stock deduction entries for the last 2 days: date, category, size, change and remaining count.</p>
                     <div id="stockDispatchHistoryByCategory"><div class="loading">Loading history...</div></div>
                 </div>
             </div>
@@ -570,10 +570,11 @@ function mergeCategoryCounts(countByCategory){
 }
 const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[];
+let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[],dispatchStockHistory=[];
 var inventoryBackup=null; // Stores last inventory state for undo
 let platform='meesho',filterPlat='all',filterStatus='all',currentUser=null;
 let openMonthKey=null;
+const DISPATCH_STOCK_HISTORY_KEY='glasshut_dispatch_stock_history_v1';
 
 // AUTH
 function showError(msg){var el=document.getElementById('loginError');el.textContent=msg;el.style.display='block';}
@@ -606,6 +607,7 @@ window.forgotPassword=async function(){
 };
 function showApp(){
     if(isPasswordReset)return; // NEVER show app during password reset
+    loadDispatchStockHistory();
     document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData().then(function(){loadPdfHistory();});
 }
 var isPasswordReset=false;
@@ -1079,73 +1081,69 @@ function renderPdfHistory(){
     container.innerHTML=html;
 }
 
+function loadDispatchStockHistory(){
+    try{
+        var raw=localStorage.getItem(DISPATCH_STOCK_HISTORY_KEY);
+        var parsed=raw?JSON.parse(raw):[];
+        dispatchStockHistory=Array.isArray(parsed)?parsed:[];
+    }catch(e){
+        dispatchStockHistory=[];
+    }
+}
+
+function persistDispatchStockHistory(){
+    try{
+        localStorage.setItem(DISPATCH_STOCK_HISTORY_KEY,JSON.stringify(dispatchStockHistory));
+    }catch(e){}
+}
+
+function addDispatchStockHistoryEntries(entries){
+    if(!entries||entries.length===0)return;
+    dispatchStockHistory=entries.concat(dispatchStockHistory||[]);
+    persistDispatchStockHistory();
+}
+
+window.clearDispatchStockHistory=function(){
+    if(!confirm('Delete stock deduction history?'))return;
+    dispatchStockHistory=[];
+    persistDispatchStockHistory();
+    renderDispatchHistoryByCategory();
+    setStatus('✅ Dispatch stock history cleared');
+};
+
 function renderDispatchHistoryByCategory(){
     var container=document.getElementById('stockDispatchHistoryByCategory');
     if(!container)return;
-    if(!pdfUploads||pdfUploads.length===0){
-        container.innerHTML='<div class="empty" style="font-size:0.7rem">No dispatch history yet.</div>';
+    if(!dispatchStockHistory||dispatchStockHistory.length===0){
+        container.innerHTML='<div class="empty" style="font-size:0.7rem">No stock dispatch history yet.</div>';
         return;
     }
     var cutoff=new Date();
     cutoff.setHours(0,0,0,0);
     cutoff.setDate(cutoff.getDate()-1); // today + yesterday
-    var grouped={};
-    pdfUploads.forEach(function(upload){
-        var sortTsRaw=upload&&upload.sortTs?upload.sortTs:null;
-        var sortDt=sortTsRaw?new Date(sortTsRaw):null;
-        if(!sortDt||isNaN(sortDt.getTime())||sortDt<cutoff)return;
-        var labels=(upload&&upload.labels)||[];
-        var dispatchDate=upload&&upload.date?upload.date:'-';
-        var sortTs=sortTsRaw;
-        var fileName=upload&&upload.name?upload.name:'-';
-        var totalNew=0;
-        var catCounts={};
-        labels.forEach(function(l){
-            if(l&&l.isDuplicate)return;
-            var match=findCategory(l&&l.sku?l.sku:'');
-            var cat=match?match.category:'Uncategorized';
-            if(!catCounts[cat])catCounts[cat]=0;
-            catCounts[cat]++;
-            totalNew++;
-        });
-        Object.keys(catCounts).forEach(function(cat){
-            if(!grouped[cat])grouped[cat]=[];
-            grouped[cat].push({
-                date:dispatchDate,
-                sortTs:sortTs,
-                fileName:fileName,
-                qty:catCounts[cat],
-                totalNew:totalNew
-            });
-        });
-    });
-    var cats=Object.keys(grouped).sort(function(a,b){return a.localeCompare(b);});
-    if(cats.length===0){
+    var rows=(dispatchStockHistory||[]).filter(function(r){
+        var dt=r&&r.ts?new Date(r.ts):null;
+        return dt&&!isNaN(dt.getTime())&&dt>=cutoff;
+    }).sort(function(a,b){return new Date(b.ts||0)-new Date(a.ts||0);});
+    if(rows.length===0){
         container.innerHTML='<div class="empty" style="font-size:0.7rem">No dispatch history in the last 2 days.</div>';
         return;
     }
     var html='';
-    cats.forEach(function(cat){
-        var rows=grouped[cat];
-        rows.sort(function(a,b){return new Date(b.sortTs||0)-new Date(a.sortTs||0);});
-        var total=rows.reduce(function(sum,r){return sum+(r.qty||0);},0);
-        html+='<div style="border:1px solid #e2e8f0;border-radius:10px;padding:0.6rem;margin-bottom:0.6rem;background:white">';
-        html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.4rem">';
-        html+='<div style="font-weight:700;color:#1e3a5f">'+escapeHtml(cat)+'</div>';
-        html+='<div style="font-size:0.7rem;color:#059669;font-weight:700">Total: '+total+' labels</div>';
-        html+='</div>';
-        html+='<div style="overflow-x:auto"><table style="width:100%;font-size:0.7rem"><thead><tr><th style="text-align:left;padding:0.25rem;border-bottom:1px solid #e2e8f0">Date</th><th style="text-align:left;padding:0.25rem;border-bottom:1px solid #e2e8f0">Source</th><th style="text-align:center;padding:0.25rem;border-bottom:1px solid #e2e8f0">Category Qty</th><th style="text-align:center;padding:0.25rem;border-bottom:1px solid #e2e8f0">Packed in File</th></tr></thead><tbody>';
-        rows.forEach(function(r){
-            html+='<tr style="border-bottom:1px solid #f1f5f9">';
-            html+='<td style="padding:0.25rem;color:#334155">'+escapeHtml(r.date||'-')+'</td>';
-            html+='<td style="padding:0.25rem;color:#64748b">'+escapeHtml(r.fileName||'-')+'</td>';
-            html+='<td style="padding:0.25rem;text-align:center;font-weight:700;color:#8b6914">'+(r.qty||0)+'</td>';
-            html+='<td style="padding:0.25rem;text-align:center;color:#475569">'+(r.totalNew||0)+'</td>';
-            html+='</tr>';
-        });
-        html+='</tbody></table></div>';
-        html+='</div>';
+    html+='<div style="overflow-x:auto"><table style="width:100%;font-size:0.72rem"><thead><tr><th style="text-align:left;padding:0.3rem;border-bottom:1px solid #e2e8f0">Date</th><th style="text-align:left;padding:0.3rem;border-bottom:1px solid #e2e8f0">Category</th><th style="text-align:center;padding:0.3rem;border-bottom:1px solid #e2e8f0">Size</th><th style="text-align:center;padding:0.3rem;border-bottom:1px solid #e2e8f0">Change</th><th style="text-align:center;padding:0.3rem;border-bottom:1px solid #e2e8f0">Count</th><th style="text-align:left;padding:0.3rem;border-bottom:1px solid #e2e8f0">Source</th></tr></thead><tbody>';
+    rows.forEach(function(r){
+        var dt=new Date(r.ts);
+        var dateTxt=dt.toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+        html+='<tr style="border-bottom:1px solid #f1f5f9">';
+        html+='<td style="padding:0.3rem;color:#334155">'+escapeHtml(dateTxt)+'</td>';
+        html+='<td style="padding:0.3rem;color:#1e3a5f;font-weight:600">'+escapeHtml(r.category||'Uncategorized')+'</td>';
+        html+='<td style="padding:0.3rem;text-align:center;color:#334155">'+escapeHtml((r.size||'-')+'"')+'</td>';
+        html+='<td style="padding:0.3rem;text-align:center;color:#dc2626;font-weight:700">'+(r.change||0)+'</td>';
+        html+='<td style="padding:0.3rem;text-align:center;color:#059669;font-weight:700">'+(r.balance===undefined?'-':r.balance)+'</td>';
+        html+='<td style="padding:0.3rem;color:#64748b">'+escapeHtml(r.source||'-')+'</td>';
+        html+='</tr>';
     });
+    html+='</tbody></table></div>';
     container.innerHTML=html;
 }
 
@@ -2100,6 +2098,7 @@ window.confirmDispatch=async function(){
     // Deduct stock
     setStatus('Deducting stock...','syncing');
     var updated=0,total=0,summary=[];
+    var dispatchedAtIso=new Date().toISOString();
     for(var idx=0;idx<keys.length;idx++){
         var d=deductions[keys[idx]];
         var actualQty=d.qty;
@@ -2109,11 +2108,24 @@ window.confirmDispatch=async function(){
         var inv=inventoryData.find(function(i){return parseInt(i.product_id)===parseInt(d.product_id)&&i.size===d.size;});
         var before=inv?inv.qty:0;
         var after=before-actualQty;
-        summary.push({name:prodName?prodName.name:'Unknown',size:d.size,before:before,deducted:actualQty,after:after});
+        summary.push({name:prodName?prodName.name:'Unknown',size:d.size,before:before,deducted:actualQty,after:after,labels:d.labels||0});
         try{
             if(inv){await db.from('inventory').update({qty:after}).eq('id',inv.id);updated++;}
             else{await db.from('inventory').insert({product_id:d.product_id,size:d.size,qty:-actualQty});updated++;}
         }catch(e){console.error('Deduct error:',e);}
+    }
+    if(summary.length>0){
+        var histEntries=summary.map(function(s){
+            return{
+                ts:dispatchedAtIso,
+                category:s.name||'Uncategorized',
+                size:s.size||'-',
+                change:-(s.deducted||0),
+                balance:s.after,
+                source:lastPdf.fileName||'dispatch'
+            };
+        });
+        addDispatchStockHistoryEntries(histEntries);
     }
     await loadInventory();
     // Save to scan_history
