@@ -337,16 +337,15 @@
                 </div>
                 <div class="form-box">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap">
-                        <h4 style="margin:0">🕒 Dispatch History by Category</h4>
-                        <button class="btn btn-danger btn-sm" disabled style="font-size:0.65rem;opacity:0.6;cursor:not-allowed">🗑️ Clear History</button>
+                        <h4 style="margin:0">🕒 Stock Dispatch History (Last 3 Days)</h4>
+                        <button class="btn btn-danger btn-sm" onclick="clearDispatchStockHistory()" style="font-size:0.65rem">🗑️ Clear History</button>
                     </div>
-                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Manual stock update is active. Dispatch button is hidden.</p>
+                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.3rem">Shared across all devices via Supabase. Logged when dispatch is confirmed from Labels tab.</p>
+                    <div id="dispatchHistorySetupHint" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:0.5rem;margin-bottom:0.5rem;font-size:0.65rem;color:#856404">
+                        ⚠️ <b>First-time setup:</b> Run this SQL in Supabase SQL Editor:<br>
+                        <code style="display:block;background:#f8f9fa;padding:0.3rem;border-radius:4px;margin-top:0.3rem;font-size:0.6rem;color:#333">CREATE TABLE IF NOT EXISTS dispatch_history (id bigint generated always as identity primary key, category text, size text, change_qty integer, balance integer, source text, dispatched_at timestamptz default now());</code>
+                    </div>
                     <div id="stockDispatchHistoryByCategory"><div class="loading">Loading history...</div></div>
-                </div>
-                <div class="form-box">
-                    <h4>📄 Label Upload History Cards</h4>
-                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Same history cards from Labels tab, available here in Stock tab.</p>
-                    <div id="stockPdfHistoryList"></div>
                 </div>
             </div>
             
@@ -579,7 +578,6 @@ let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],product
 var inventoryBackup=null; // Stores last inventory state for undo
 let platform='meesho',filterPlat='all',filterStatus='all',currentUser=null;
 let openMonthKey=null;
-const DISPATCH_STOCK_HISTORY_KEY='glasshut_dispatch_stock_history_v1';
 
 // AUTH
 function showError(msg){var el=document.getElementById('loginError');el.textContent=msg;el.style.display='block';}
@@ -595,8 +593,8 @@ async function doLogout(){
     await db.auth.signOut();
     currentUser=null;
     // Clear all local data to prevent stale state on next login
-    stockData=[];ordersData=[];skuData=[];scanHistory=[];expensesData=[];productsData=[];inventoryData=[];
-    lastPdf={data:null,labels:null,fileName:null,fromCard:false,uploadTs:null};
+    stockData=[];ordersData=[];skuData=[];scanHistory=[];expensesData=[];productsData=[];inventoryData=[];dispatchStockHistory=[];
+    lastPdf={data:null,labels:null,fileName:null,fromCard:false};
     pdfUploads=[];openCardId=null;openMonthKey=null;inventoryBackup=null;
     document.getElementById('loginPage').classList.remove('hide');
     document.getElementById('appContainer').classList.remove('show');
@@ -720,7 +718,7 @@ async function loadScanHistory(){try{
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
 async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
 async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();renderProducts();renderDashboard();return true;}catch(err){inventoryData=[];return true;}}
-async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();if(s&&o)setStatus('✅ Connected');}
+async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();await loadDispatchStockHistory();if(s&&o)setStatus('✅ Connected');}
 
 // SKU CRUD
 async function addSku(){
@@ -835,11 +833,10 @@ async function savePdfUpload(upload){
 }
 async function loadPdfHistory(){
     try{var r=await db.from('pdf_uploads').select('*').order('created_at',{ascending:false});
-        if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){pdfUploads=[];renderPdfHistory();renderDispatchHistoryByCategory();return;}throw new Error(r.error.message);}
-        pdfUploads=(r.data||[]).map(function(row){return{id:row.id,name:row.file_name,date:new Date(row.upload_date).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),sortTs:row.upload_date||row.created_at||null,labels:row.labels||[],newCount:row.new_count||0,dupCount:row.dup_count||0};});
+        if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){pdfUploads=[];renderPdfHistory();return;}throw new Error(r.error.message);}
+        pdfUploads=(r.data||[]).map(function(row){return{id:row.id,name:row.file_name,date:new Date(row.upload_date).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),labels:row.labels||[],newCount:row.new_count||0,dupCount:row.dup_count||0};});
         renderPdfHistory();
-        renderDispatchHistoryByCategory();
-    }catch(err){pdfUploads=[];renderPdfHistory();renderDispatchHistoryByCategory();}}
+    }catch(err){pdfUploads=[];renderPdfHistory();}}
 
 var lastPdf={data:null,labels:null,fileName:null,fromCard:false,uploadTs:null};
 window.handlePdfUpload=async function(input){
@@ -852,8 +849,6 @@ window.handlePdfUpload=async function(input){
         await loadSkus();
         var arrayBuffer=await file.arrayBuffer();
         lastPdf.data=arrayBuffer.slice(0);
-        lastPdf.fromCard=false;
-        lastPdf.uploadTs=new Date().toISOString();
         var pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
         var labels=[];
         for(var i=1;i<=pdf.numPages;i++){
@@ -935,7 +930,7 @@ window.handlePdfUpload=async function(input){
         html+='<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px dashed #c5cfe0;display:flex;gap:0.5rem;align-items:center">';
         html+='<span style="font-size:0.7rem;font-weight:700;color:#1e3a5f">Step 2:</span>';
         html+='<span style="font-size:0.7rem;color:#6b7280">Check stock → Print labels → Then:</span>';
-        // html+='<button class="btn btn-success" onclick="confirmDispatch(true)" style="font-size:0.8rem;padding:0.5rem 1rem">⚡ Automatic Dispatch</button>';
+        html+='<button class="btn btn-success" onclick="confirmDispatch()" style="font-size:0.8rem;padding:0.5rem 1rem">✅ Confirm Dispatch (deduct stock)</button>';
         html+='</div></div>';
         // Save upload history
         var upload={name:file.name,labels:labels,newCount:newLabels.length,dupCount:dupLabels.length};
@@ -1031,7 +1026,6 @@ window.useCardLabels=function(uploadId){
         lastPdf.data=null; // Card labels don't have raw PDF data
         lastPdf.fromCard=true;
         lastPdf.fileName=upload.name||'card-labels';
-        lastPdf.uploadTs=upload.sortTs||null;
         setStatus('📋 Loaded '+upload.labels.length+' labels from history card');
     }
 };
@@ -1058,7 +1052,7 @@ window.deleteUpload=async function(id){if(!confirm('Delete this upload and its d
         setStatus('✅ Deleted (upload + scan history)');
     }catch(err){setStatus('❌ '+err.message,'error');}};
 window.clearAllUploads=async function(){if(!confirm('Delete ALL upload history?'))return;
-    try{await db.from('pdf_uploads').delete().neq('id',0);pdfUploads=[];openCardId=null;renderPdfHistory();renderDispatchHistoryByCategory();setStatus('✅ All cleared');}catch(err){setStatus('❌ '+err.message,'error');}};
+    try{await db.from('pdf_uploads').delete().neq('id',0);pdfUploads=[];openCardId=null;renderPdfHistory();setStatus('✅ All cleared');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.clearScanHistory=async function(){
     if(!confirm('⚠️ Delete ALL duplicate detection history?\nAll labels will show as "New" next time.'))return;
     setStatus('🔄 Clearing...','syncing');
@@ -1066,15 +1060,8 @@ window.clearScanHistory=async function(){
 };
 
 function renderPdfHistory(){
-    var labelsContainer=document.getElementById('pdfHistoryList');
-    var stockContainer=document.getElementById('stockPdfHistoryList');
-    if(!labelsContainer&&!stockContainer)return;
-    if(pdfUploads.length===0){
-        var emptyHtml='<div class="empty">No PDFs uploaded yet. Upload one above!</div>';
-        if(labelsContainer)labelsContainer.innerHTML=emptyHtml;
-        if(stockContainer)stockContainer.innerHTML=emptyHtml;
-        return;
-    }
+    var container=document.getElementById('pdfHistoryList');
+    if(pdfUploads.length===0){container.innerHTML='<div class="empty">No PDFs uploaded yet. Upload one above!</div>';return;}
     var html='';
     pdfUploads.forEach(function(u){
         var isOpen=openCardId===u.id;
@@ -1093,107 +1080,6 @@ function renderPdfHistory(){
         if(isOpen)html+=buildCardDetails(u);
         html+='</div></div>';
     });
-    if(labelsContainer)labelsContainer.innerHTML=html;
-    if(stockContainer)stockContainer.innerHTML=html;
-}
-
-function loadDispatchStockHistory(){
-    try{
-        var raw=localStorage.getItem(DISPATCH_STOCK_HISTORY_KEY);
-        var parsed=raw?JSON.parse(raw):[];
-        dispatchStockHistory=Array.isArray(parsed)?parsed:[];
-    }catch(e){
-        dispatchStockHistory=[];
-    }
-}
-
-function persistDispatchStockHistory(){
-    try{
-        localStorage.setItem(DISPATCH_STOCK_HISTORY_KEY,JSON.stringify(dispatchStockHistory));
-    }catch(e){}
-}
-
-function addDispatchStockHistoryEntries(entries){
-    if(!entries||entries.length===0)return;
-    dispatchStockHistory=entries.concat(dispatchStockHistory||[]);
-    persistDispatchStockHistory();
-}
-
-window.clearDispatchStockHistory=function(){
-    if(!confirm('Delete stock deduction history?'))return;
-    dispatchStockHistory=[];
-    persistDispatchStockHistory();
-    renderDispatchHistoryByCategory();
-    setStatus('✅ Dispatch stock history cleared');
-};
-
-function renderDispatchHistoryByCategory(){
-    var container=document.getElementById('stockDispatchHistoryByCategory');
-    if(!container)return;
-    if(!dispatchStockHistory||dispatchStockHistory.length===0){
-        container.innerHTML='<div class="empty" style="font-size:0.7rem">No stock dispatch history yet.</div>';
-        return;
-    }
-    var cutoff=new Date();
-    cutoff.setHours(0,0,0,0);
-    cutoff.setDate(cutoff.getDate()-1); // today + yesterday
-    var rows=(dispatchStockHistory||[]).filter(function(r){
-        var dt=r&&r.ts?new Date(r.ts):null;
-        return dt&&!isNaN(dt.getTime())&&dt>=cutoff;
-    }).sort(function(a,b){return new Date(b.ts||0)-new Date(a.ts||0);});
-    if(rows.length===0){
-        container.innerHTML='<div class="empty" style="font-size:0.7rem">No dispatch history in the last 2 days.</div>';
-        return;
-    }
-    var displayRows=rows.slice(0,200); // keep UI responsive for large histories
-    var totalDeducted=displayRows.reduce(function(sum,r){return sum+Math.abs(parseFloat(r.change)||0);},0);
-    var uniqueCats={};
-    displayRows.forEach(function(r){uniqueCats[r.category||'Uncategorized']=1;});
-    var groupedByCat={};
-    displayRows.forEach(function(r){
-        var cat=r.category||'Uncategorized';
-        if(!groupedByCat[cat])groupedByCat[cat]=[];
-        groupedByCat[cat].push(r);
-    });
-    var catNames=Object.keys(groupedByCat).sort(function(a,b){
-        return groupedByCat[b].length-groupedByCat[a].length;
-    });
-    var html='';
-    html+='<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.5rem">';
-    html+='<span style="background:#eef2ff;color:#1e3a5f;padding:0.2rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:600">Entries: '+displayRows.length+'</span>';
-    html+='<span style="background:#ecfdf5;color:#065f46;padding:0.2rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:600">Categories: '+catNames.length+'</span>';
-    html+='<span style="background:#fef2f2;color:#991b1b;padding:0.2rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:600">Total Deduction: -'+totalDeducted+'</span>';
-    html+='</div>';
-    catNames.forEach(function(cat,catIdx){
-        var catRows=groupedByCat[cat];
-        var catDeduct=catRows.reduce(function(sum,r){return sum+Math.abs(parseFloat(r.change)||0);},0);
-        var openAttr=catIdx<2?' open':'';
-        html+='<details'+openAttr+' style="border:1px solid #e2e8f0;border-radius:10px;background:#fff;margin-bottom:0.45rem;overflow:hidden">';
-        html+='<summary style="cursor:pointer;list-style:none;padding:0.5rem 0.6rem;background:#f8fafc;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap">';
-        html+='<span style="font-size:0.78rem;color:#1e3a5f;font-weight:700">'+escapeHtml(cat)+'</span>';
-        html+='<span style="display:flex;gap:0.35rem;flex-wrap:wrap">';
-        html+='<span style="background:#eef2ff;color:#1e3a5f;padding:0.12rem 0.42rem;border-radius:999px;font-size:0.62rem;font-weight:600">'+catRows.length+' entries</span>';
-        html+='<span style="background:#fef2f2;color:#991b1b;padding:0.12rem 0.42rem;border-radius:999px;font-size:0.62rem;font-weight:600">-'+catDeduct+'</span>';
-        html+='</span>';
-        html+='</summary>';
-        html+='<div style="overflow-x:auto"><table style="width:100%;font-size:0.72rem"><thead><tr style="background:#fdfefe"><th style="text-align:left;padding:0.35rem;border-bottom:1px solid #e2e8f0">Date</th><th style="text-align:center;padding:0.35rem;border-bottom:1px solid #e2e8f0">Size</th><th style="text-align:center;padding:0.35rem;border-bottom:1px solid #e2e8f0">Change</th><th style="text-align:center;padding:0.35rem;border-bottom:1px solid #e2e8f0">Count</th><th style="text-align:left;padding:0.35rem;border-bottom:1px solid #e2e8f0">Source</th></tr></thead><tbody>';
-        catRows.forEach(function(r,idx){
-            var dt=new Date(r.ts);
-            var dateTxt=dt.toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-            html+='<tr style="border-bottom:1px solid #f1f5f9;background:'+(idx%2===0?'#ffffff':'#fcfdff')+'">';
-            html+='<td style="padding:0.3rem;color:#334155">'+escapeHtml(dateTxt)+'</td>';
-            html+='<td style="padding:0.3rem;text-align:center;color:#334155">'+escapeHtml((r.size||'-')+'"')+'</td>';
-            html+='<td style="padding:0.3rem;text-align:center;color:#dc2626;font-weight:700">'+(r.change||0)+'</td>';
-            html+='<td style="padding:0.3rem;text-align:center;color:#059669;font-weight:700">'+(r.balance===undefined?'-':r.balance)+'</td>';
-            html+='<td style="padding:0.3rem;color:#64748b">'+escapeHtml(r.source||'-')+'</td>';
-            html+='</tr>';
-        });
-        html+='</tbody></table></div>';
-        html+='</details>';
-    });
-    if(rows.length>displayRows.length){
-        html+='<div style="font-size:0.65rem;color:#64748b;margin-top:0.35rem">Showing latest '+displayRows.length+' of '+rows.length+' entries for faster loading.</div>';
-    }
     container.innerHTML=html;
 }
 
@@ -1261,7 +1147,7 @@ function buildCardDetails(upload){
     if(totalPack>0){
         html+='<div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center">';
         html+='<button class="btn btn-primary btn-sm" onclick="downloadSortedPdf(true)" style="font-size:0.7rem">📥 Download Sorted PDF</button>';
-        // html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch(true)" style="font-size:0.7rem">⚡ Automatic Dispatch</button>';
+        html+='<button class="btn btn-success btn-sm" onclick="useCardLabels('+upload.id+');confirmDispatch()" style="font-size:0.7rem">✅ Confirm Dispatch</button>';
         html+='</div>';
     }
     // SKU × QTY Packing List
@@ -1410,13 +1296,141 @@ function extractPartner(text){
     return 'Other';
 }
 
+// DISPATCH STOCK HISTORY (Supabase - shared across devices)
+// Table: dispatch_history (id, category, size, change_qty, balance, source, dispatched_at)
+// SQL: CREATE TABLE dispatch_history (id bigint generated always as identity primary key, category text, size text, change_qty integer, balance integer, source text, dispatched_at timestamptz default now());
+async function loadDispatchStockHistory(){
+    try{
+        var cutoff=new Date();
+        cutoff.setHours(0,0,0,0);
+        cutoff.setDate(cutoff.getDate()-2); // last 3 days
+        var r=await db.from('dispatch_history').select('*').gte('dispatched_at',cutoff.toISOString()).order('dispatched_at',{ascending:false});
+        if(r.error){
+            if(r.error.code==='42P01'||r.error.message.includes('does not exist')){
+                dispatchStockHistory=[];
+                var hint=document.getElementById('dispatchHistorySetupHint');
+                if(hint)hint.style.display='block';
+                renderDispatchHistoryByCategory();
+                return;
+            }
+            throw new Error(r.error.message);
+        }
+        dispatchStockHistory=(r.data||[]).map(function(row){
+            return{ts:row.dispatched_at,category:row.category,size:row.size,change:row.change_qty,balance:row.balance,source:row.source};
+        });
+        var hint=document.getElementById('dispatchHistorySetupHint');
+        if(hint)hint.style.display='none';
+        renderDispatchHistoryByCategory();
+    }catch(err){
+        console.error('loadDispatchStockHistory error:',err);
+        dispatchStockHistory=[];
+        renderDispatchHistoryByCategory();
+    }
+}
+async function addDispatchStockHistoryEntries(entries){
+    if(!entries||entries.length===0)return;
+    try{
+        var rows=entries.map(function(e){
+            return{category:e.category||'Uncategorized',size:e.size||'-',change_qty:e.change||0,balance:e.balance===undefined?null:e.balance,source:e.source||'dispatch',dispatched_at:e.ts||new Date().toISOString()};
+        });
+        var r=await db.from('dispatch_history').insert(rows);
+        if(r.error){
+            if(r.error.code==='42P01'||r.error.message.includes('does not exist')){
+                setStatus('⚠️ dispatch_history table missing — run SQL in Supabase','error');
+                return;
+            }
+            console.error('dispatch_history insert error:',r.error.message);
+        } else {
+            // Reload to get fresh data with DB-generated timestamps
+            await loadDispatchStockHistory();
+        }
+    }catch(err){console.error('addDispatchStockHistoryEntries error:',err);}
+}
+window.clearDispatchStockHistory=async function(){
+    if(!confirm('Delete ALL stock dispatch history? This cannot be undone.'))return;
+    setStatus('🔄 Clearing...','syncing');
+    try{
+        var cutoff=new Date();
+        cutoff.setHours(0,0,0,0);
+        cutoff.setDate(cutoff.getDate()-2);
+        var r=await db.from('dispatch_history').delete().gte('dispatched_at',cutoff.toISOString());
+        if(r.error)throw new Error(r.error.message);
+        dispatchStockHistory=[];
+        renderDispatchHistoryByCategory();
+        setStatus('✅ Dispatch history cleared');
+    }catch(err){setStatus('❌ '+err.message,'error');}
+};
+function renderDispatchHistoryByCategory(){
+    var container=document.getElementById('stockDispatchHistoryByCategory');
+    if(!container)return;
+    if(!dispatchStockHistory||dispatchStockHistory.length===0){
+        container.innerHTML='<div class="empty" style="font-size:0.7rem">No stock dispatch history yet.</div>';
+        return;
+    }
+    var cutoff=new Date();
+    cutoff.setHours(0,0,0,0);
+    cutoff.setDate(cutoff.getDate()-2); // today + yesterday + day before (3 days)
+    var rows=(dispatchStockHistory||[]).filter(function(r){
+        var dt=r&&r.ts?new Date(r.ts):null;
+        return dt&&!isNaN(dt.getTime())&&dt>=cutoff;
+    }).sort(function(a,b){return new Date(b.ts||0)-new Date(a.ts||0);});
+    if(rows.length===0){
+        container.innerHTML='<div class="empty" style="font-size:0.7rem">No dispatch history in the last 3 days.</div>';
+        return;
+    }
+    var displayRows=rows.slice(0,200);
+    var totalDeducted=displayRows.reduce(function(sum,r){return sum+Math.abs(parseFloat(r.change)||0);},0);
+    var groupedByCat={};
+    displayRows.forEach(function(r){
+        var cat=r.category||'Uncategorized';
+        if(!groupedByCat[cat])groupedByCat[cat]=[];
+        groupedByCat[cat].push(r);
+    });
+    var catNames=Object.keys(groupedByCat).sort(function(a,b){return groupedByCat[b].length-groupedByCat[a].length;});
+    var html='';
+    html+='<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.5rem">';
+    html+='<span style="background:#eef2ff;color:#1e3a5f;padding:0.2rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:600">Entries: '+displayRows.length+'</span>';
+    html+='<span style="background:#ecfdf5;color:#065f46;padding:0.2rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:600">Categories: '+catNames.length+'</span>';
+    html+='<span style="background:#fef2f2;color:#991b1b;padding:0.2rem 0.5rem;border-radius:999px;font-size:0.65rem;font-weight:600">Total Deduction: -'+totalDeducted+'</span>';
+    html+='</div>';
+    catNames.forEach(function(cat,catIdx){
+        var catRows=groupedByCat[cat];
+        var catDeduct=catRows.reduce(function(sum,r){return sum+Math.abs(parseFloat(r.change)||0);},0);
+        var openAttr=catIdx<2?' open':'';
+        html+='<details'+openAttr+' style="border:1px solid #e2e8f0;border-radius:10px;background:#fff;margin-bottom:0.45rem;overflow:hidden">';
+        html+='<summary style="cursor:pointer;list-style:none;padding:0.5rem 0.6rem;background:#f8fafc;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap">';
+        html+='<span style="font-size:0.78rem;color:#1e3a5f;font-weight:700">'+escapeHtml(cat)+'</span>';
+        html+='<span style="display:flex;gap:0.35rem;flex-wrap:wrap">';
+        html+='<span style="background:#eef2ff;color:#1e3a5f;padding:0.12rem 0.42rem;border-radius:999px;font-size:0.62rem;font-weight:600">'+catRows.length+' entries</span>';
+        html+='<span style="background:#fef2f2;color:#991b1b;padding:0.12rem 0.42rem;border-radius:999px;font-size:0.62rem;font-weight:600">-'+catDeduct+'</span>';
+        html+='</span></summary>';
+        html+='<div style="overflow-x:auto"><table style="width:100%;font-size:0.72rem"><thead><tr style="background:#fdfefe"><th style="text-align:left;padding:0.35rem;border-bottom:1px solid #e2e8f0">Date</th><th style="text-align:center;padding:0.35rem;border-bottom:1px solid #e2e8f0">Size</th><th style="text-align:center;padding:0.35rem;border-bottom:1px solid #e2e8f0">Change</th><th style="text-align:center;padding:0.35rem;border-bottom:1px solid #e2e8f0">After</th><th style="text-align:left;padding:0.35rem;border-bottom:1px solid #e2e8f0">Source</th></tr></thead><tbody>';
+        catRows.forEach(function(r,idx){
+            var dt=new Date(r.ts);
+            var dateTxt=dt.toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+            html+='<tr style="border-bottom:1px solid #f1f5f9;background:'+(idx%2===0?'#ffffff':'#fcfdff')+'">';
+            html+='<td style="padding:0.3rem;color:#334155">'+escapeHtml(dateTxt)+'</td>';
+            html+='<td style="padding:0.3rem;text-align:center;color:#334155">'+escapeHtml((r.size||'-')+'"')+'</td>';
+            html+='<td style="padding:0.3rem;text-align:center;color:#dc2626;font-weight:700">'+(r.change||0)+'</td>';
+            html+='<td style="padding:0.3rem;text-align:center;color:#059669;font-weight:700">'+(r.balance===undefined?'-':r.balance)+'</td>';
+            html+='<td style="padding:0.3rem;color:#64748b">'+escapeHtml(r.source||'-')+'</td>';
+            html+='</tr>';
+        });
+        html+='</tbody></table></div></details>';
+    });
+    if(rows.length>displayRows.length){
+        html+='<div style="font-size:0.65rem;color:#64748b;margin-top:0.35rem">Showing latest '+displayRows.length+' of '+rows.length+' entries.</div>';
+    }
+    container.innerHTML=html;
+}
+
 // STOCK
 function populateItemDropdown(){var s=document.getElementById('o-item');s.innerHTML='<option value="">-- Select --</option>'+stockData.map(function(i){return'<option value="'+i.id+'" data-size="'+i.size+'" data-price="'+i.price+'">'+i.name+' ('+i.size+'") ₹'+i.price+'</option>';}).join('');}
 function getStockOptions(sel){return'<option value="">--</option>'+stockData.map(function(s){return'<option value="'+s.name+'"'+(sel===s.name?' selected':'')+'>'+s.name+'</option>';}).join('');}
 document.addEventListener('change',function(e){if(e.target.id==='o-item'){var opt=e.target.options[e.target.selectedIndex];if(opt.value){document.getElementById('o-size').value=opt.dataset.size;document.getElementById('o-amt').value=opt.dataset.price;}}});
 
 // TABS
-document.querySelectorAll('.tab-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='stock'){loadDispatchStockHistory();renderStock();renderInventory();}});});
+document.querySelectorAll('.tab-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='stock'){loadDispatchStockHistory();renderInventory();}});});
 document.querySelectorAll('.plat-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.plat-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');platform=btn.dataset.p;});});
 document.querySelectorAll('[data-f],[data-s]').forEach(function(btn){btn.addEventListener('click',function(){if(btn.dataset.f){document.querySelectorAll('.filter-btn[data-f]').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');filterPlat=btn.dataset.f;}if(btn.dataset.s){if(btn.classList.contains('active')){btn.classList.remove('active');filterStatus='all';}else{document.querySelectorAll('.filter-btn[data-s]').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');filterStatus=btn.dataset.s;}}renderOrders();});});
 
@@ -2077,7 +2091,7 @@ window.undoLastDispatch=async function(){
         alert('❌ Undo failed: '+err.message);
     }
 };
-window.confirmDispatch=async function(autoMode){
+window.confirmDispatch=async function(){
     if(!lastPdf.labels||lastPdf.labels.length===0){alert('Upload a label PDF first');return;}
     var newLabels=lastPdf.fromCard?lastPdf.labels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}):lastPdf.labels.filter(function(l){return !l.isDuplicate;});
     if(newLabels.length===0){alert('No labels to dispatch');return;}
@@ -2139,19 +2153,15 @@ window.confirmDispatch=async function(autoMode){
         var before=inv?inv.qty:0;
         previewLines.push(name+' '+d.size+'" : '+before+' → '+(before-d.qty)+' (-'+d.qty+' dzn)');
     });
-    if(!autoMode){
-        var msg='📦 Confirm Dispatch?\n\n'+newLabels.length+' labels, '+keys.length+' products:\n\n'+previewLines.join('\n');
-        if(unmappedSkus.length>0)msg+='\n\n⚠️ Unmapped: '+unmappedSkus.join(', ');
-        msg+='\n\nDeduct stock now?';
-        if(!confirm(msg))return;
-    }
+    var msg='📦 Confirm Dispatch?\n\n'+newLabels.length+' labels, '+keys.length+' products:\n\n'+previewLines.join('\n');
+    if(unmappedSkus.length>0)msg+='\n\n⚠️ Unmapped: '+unmappedSkus.join(', ');
+    msg+='\n\nDeduct stock now?';
+    if(!confirm(msg))return;
     // Save backup
     inventoryBackup={timestamp:new Date().toISOString(),data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})};
     // Deduct stock
     setStatus('Deducting stock...','syncing');
     var updated=0,total=0,summary=[];
-    var dispatchedAtIso=new Date().toISOString();
-    var historyTs=lastPdf.uploadTs||dispatchedAtIso;
     for(var idx=0;idx<keys.length;idx++){
         var d=deductions[keys[idx]];
         var actualQty=d.qty;
@@ -2161,13 +2171,15 @@ window.confirmDispatch=async function(autoMode){
         var inv=inventoryData.find(function(i){return parseInt(i.product_id)===parseInt(d.product_id)&&i.size===d.size;});
         var before=inv?inv.qty:0;
         var after=before-actualQty;
-        summary.push({name:prodName?prodName.name:'Unknown',size:d.size,before:before,deducted:actualQty,after:after,labels:d.labels||0});
+        summary.push({name:prodName?prodName.name:'Unknown',size:d.size,before:before,deducted:actualQty,after:after});
         try{
             if(inv){await db.from('inventory').update({qty:after}).eq('id',inv.id);updated++;}
             else{await db.from('inventory').insert({product_id:d.product_id,size:d.size,qty:-actualQty});updated++;}
         }catch(e){console.error('Deduct error:',e);}
     }
-    if(summary.length>0){
+    // Save to dispatch_history table (Supabase - synced across all devices)
+    if(summary&&summary.length>0){
+        var historyTs=lastPdf.uploadTs||new Date().toISOString();
         var histEntries=summary.map(function(s){
             return{
                 ts:historyTs,
@@ -2178,8 +2190,7 @@ window.confirmDispatch=async function(autoMode){
                 source:lastPdf.fileName||'dispatch'
             };
         });
-        addDispatchStockHistoryEntries(histEntries);
-        renderDispatchHistoryByCategory();
+        await addDispatchStockHistoryEntries(histEntries); // await: saves to Supabase
     }
     await loadInventory();
     // Save to scan_history
