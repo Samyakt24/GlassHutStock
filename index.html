@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Glass HUT - Stock & Sales Manager</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700|DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -517,6 +517,9 @@
 <script>
 const SUPABASE_URL='https://fjogabazmjrzulkpihyy.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZqb2dhYmF6bWpyenVsa3BpaHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4MjQ4MDksImV4cCI6MjA4NDQwMDgwOX0.-OmFa7Hog-zBwpSE_9cjfxnBXbCjpawAtKtY-E1Ez2w';
+// ⚠️ SECURITY: Anon key is public-safe BUT you MUST enable Row Level Security (RLS)
+// in Supabase for ALL tables: orders, stock, expenses, products, inventory, sku_map, scan_history, pdf_uploads
+// Without RLS, anyone with this key can read/write your database.
 const{createClient}=window.supabase;const db=createClient(SUPABASE_URL,SUPABASE_KEY);
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -559,7 +562,7 @@ function mergeCategoryCounts(countByCategory){
 }
 const MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[],inventoryHistoryData=[];
+let stockData=[],ordersData=[],skuData=[],scanHistory=[],expensesData=[],productsData=[],inventoryData=[];
 var inventoryBackup=null; // Stores last inventory state for undo
 let platform='meesho',filterPlat='all',filterStatus='all',currentUser=null;
 let openMonthKey=null;
@@ -574,7 +577,16 @@ async function doLogin(){
     try{var r=await db.auth.signInWithPassword({email,password});if(r.error)throw new Error(r.error.message);currentUser=r.data.user;showApp();}catch(err){showError(err.message);}
     document.getElementById('loginBtn').disabled=false;document.getElementById('loginBtn').textContent='Login';
 }
-async function doLogout(){await db.auth.signOut();currentUser=null;document.getElementById('loginPage').classList.remove('hide');document.getElementById('appContainer').classList.remove('show');}
+async function doLogout(){
+    await db.auth.signOut();
+    currentUser=null;
+    // Clear all local data to prevent stale state on next login
+    stockData=[];ordersData=[];skuData=[];scanHistory=[];expensesData=[];productsData=[];inventoryData=[];
+    lastPdf={data:null,labels:null,fileName:null,fromCard:false};
+    pdfUploads=[];openCardId=null;openMonthKey=null;inventoryBackup=null;
+    document.getElementById('loginPage').classList.remove('hide');
+    document.getElementById('appContainer').classList.remove('show');
+}
 window.forgotPassword=async function(){
     var email=document.getElementById('loginEmail').value.trim();
     if(!email){alert('Enter your email first, then click Forgot Password');return;}
@@ -590,35 +602,34 @@ function showApp(){
 }
 var isPasswordReset=false;
 async function checkAuth(){
-    // Step 1: Check URL hash FIRST (synchronous, reliable)
+    // Step 1: Register onAuthStateChange FIRST so we never miss events
+    db.auth.onAuthStateChange(function(event,session){
+        if(event==='PASSWORD_RECOVERY'){
+            isPasswordReset=true;
+            showPasswordReset();
+        } else if(event==='SIGNED_IN'&&session&&!isPasswordReset){
+            // Only auto-show app if not already shown and not in password reset
+            if(!currentUser){
+                currentUser=session.user;
+                showApp();
+            }
+        }
+    });
+    // Step 2: Check URL hash for recovery token (synchronous)
     var hash=window.location.hash||'';
     var params=new URLSearchParams(window.location.search);
     var fullUrl=window.location.href;
     if(hash.includes('type=recovery')||hash.includes('type%3Drecovery')||params.get('type')==='recovery'||fullUrl.includes('type=recovery')){
         isPasswordReset=true;
-        // Wait for Supabase to process the token
-        await new Promise(function(resolve){setTimeout(resolve,1000);});
         showPasswordReset();
-        // Clean URL
         history.replaceState(null,'',window.location.pathname);
         return;
     }
-    // Step 2: Listen for PASSWORD_RECOVERY event (backup)
-    db.auth.onAuthStateChange(function(event,session){
-        if(event==='PASSWORD_RECOVERY'){
-            isPasswordReset=true;
-            showPasswordReset();
-        }
-    });
-    // Step 3: Normal auth check
+    // Step 3: Check existing session (no arbitrary delay needed)
     var r=await db.auth.getSession();
-    if(r.data.session){
-        // Wait a moment to let onAuthStateChange fire if it's a recovery
-        await new Promise(function(resolve){setTimeout(resolve,800);});
-        if(!isPasswordReset){
-            currentUser=r.data.session.user;
-            showApp();
-        }
+    if(r.data&&r.data.session&&!isPasswordReset){
+        currentUser=r.data.session.user;
+        showApp();
     }
 }
 function showPasswordReset(){
@@ -693,8 +704,7 @@ async function loadScanHistory(){try{
 }catch(err){scanHistory=[];return true;}}
 async function loadExpenses(){try{var r=await db.from('expenses').select('*').order('expense_date',{ascending:false});if(r.error){if(r.error.message.includes('does not exist')){expensesData=[];renderExpenses();return true;}throw new Error(r.error.message);}expensesData=r.data||[];renderExpenses();renderDashboard();return true;}catch(err){expensesData=[];renderExpenses();return true;}}
 async function loadProducts(){try{var r=await db.from('products').select('*').order('name',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){productsData=[];return true;}throw new Error(r.error.message);}productsData=r.data||[];renderProducts();renderStock();renderDashboard();return true;}catch(err){productsData=[];return true;}}
-async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];await loadInventoryHistory();renderInventory();renderProducts();renderDashboard();return true;}catch(err){inventoryData=[];return true;}}
-async function loadInventoryHistory(){try{var r=await db.from('inventory_history').select('*').order('changed_at',{ascending:false}).limit(1000);if(r.error){inventoryHistoryData=[];return;}inventoryHistoryData=r.data||[];}catch(e){inventoryHistoryData=[];}}
+async function loadInventory(){try{var r=await db.from('inventory').select('*').order('product_id',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')){inventoryData=[];return true;}throw new Error(r.error.message);}inventoryData=r.data||[];renderInventory();renderProducts();renderDashboard();return true;}catch(err){inventoryData=[];return true;}}
 async function refreshData(){setStatus('🔄 Syncing...','syncing');var s=await loadStock(),o=await loadOrders();await loadSkus();await loadScanHistory();await loadExpenses();await loadProducts();await loadInventory();if(s&&o)setStatus('✅ Connected');}
 
 // SKU CRUD
@@ -760,7 +770,7 @@ window.quickAssignSku=async function(skuName){
     var el=document.querySelector('[data-assign-sku="'+CSS.escape(skuName)+'"]');if(!el)return;
     var cat=el.value;if(!cat){alert('Select category first');return;}
     if(skuData.find(function(s){return normSku(s.sku_name)===normSku(skuName);})){alert('Already mapped!');return;}
-    try{var r=await db.from('sku_map').insert({sku_name:skuName,category:cat});if(r.error)throw new Error(r.error.message);await loadSkus();if(lastPdfLabels.length>0)renderPdfResults();setStatus('✅ SKU mapped!');}catch(err){setStatus('❌ '+err.message,'error');}
+    try{var r=await db.from('sku_map').insert({sku_name:skuName,category:cat});if(r.error)throw new Error(r.error.message);await loadSkus();if(lastPdf.labels&&lastPdf.labels.length>0)renderPdfResults();setStatus('✅ SKU mapped!');}catch(err){setStatus('❌ '+err.message,'error');}
 };
 
 function renderSkus(){
@@ -798,9 +808,16 @@ var pdfUploads=[];
 var openCardId=null;
 
 async function savePdfUpload(upload){
-    try{var r=await db.from('pdf_uploads').insert({file_name:upload.name,upload_date:new Date().toISOString(),labels:upload.labels,new_count:upload.newCount,dup_count:upload.dupCount});
+    try{
+        var r=await db.from('pdf_uploads').insert({file_name:upload.name,upload_date:new Date().toISOString(),labels:upload.labels,new_count:upload.newCount,dup_count:upload.dupCount});
         if(r.error)throw new Error(r.error.message);
-    }catch(err){console.error('Save PDF error:',err);}}
+        return true;
+    }catch(err){
+        console.error('Save PDF error:',err);
+        setStatus('⚠️ Upload history not saved: '+err.message,'error');
+        return false;
+    }
+}
 async function loadPdfHistory(){
     try{var r=await db.from('pdf_uploads').select('*').order('created_at',{ascending:false});
         if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){pdfUploads=[];renderPdfHistory();return;}throw new Error(r.error.message);}
@@ -808,7 +825,7 @@ async function loadPdfHistory(){
         renderPdfHistory();
     }catch(err){pdfUploads=[];renderPdfHistory();}}
 
-var lastPdfData=null,lastPdfLabels=null;
+var lastPdf={data:null,labels:null,fileName:null,fromCard:false};
 window.handlePdfUpload=async function(input){
     var file=input.files[0];if(!file)return;
     var statusDiv=document.getElementById('pdfStatus');
@@ -818,7 +835,7 @@ window.handlePdfUpload=async function(input){
         await loadScanHistory();
         await loadSkus();
         var arrayBuffer=await file.arrayBuffer();
-        lastPdfData=arrayBuffer.slice(0);
+        lastPdf.data=arrayBuffer.slice(0);
         var pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
         var labels=[];
         for(var i=1;i<=pdf.numPages;i++){
@@ -836,8 +853,8 @@ window.handlePdfUpload=async function(input){
                 labels.push({orderId:orderId||'Unknown-P'+i,sku:sku||'Unknown',size:size||'-',qty:qty,partner:partner,isDuplicate:isDup,page:i});
             }
         }
-        lastPdfLabels=labels;
-        lastPdfLabels._fileName=file.name;
+        lastPdf.labels=labels;
+        lastPdf.fileName=file.name;
         if(labels.length===0){statusDiv.innerHTML='<div class="alert alert-danger">❌ No labels found.</div>';setStatus('❌ No labels','error');input.value='';return;}
         var newLabels=labels.filter(function(l){return !l.isDuplicate;});
         var dupLabels=labels.filter(function(l){return l.isDuplicate;});
@@ -918,12 +935,13 @@ window.handlePdfUpload=async function(input){
 };
 
 window.downloadSortedPdf=async function(includeAll){
-    if(!lastPdfData||!lastPdfLabels){alert('Upload a label PDF first');return;}
-    var allLabels=includeAll?lastPdfLabels:lastPdfLabels.filter(function(l){return !l.isDuplicate;});
+    if(!lastPdf.labels){alert('Upload a label PDF first');return;}
+    if(!lastPdf.data){alert('Sorted PDF download requires a freshly uploaded PDF.\nHistory card labels cannot be re-sorted.');return;}
+    var allLabels=includeAll?lastPdf.labels:lastPdf.labels.filter(function(l){return !l.isDuplicate;});
     if(allLabels.length===0){alert('No labels to sort!');return;}
     setStatus('🔄 Generating sorted PDF ('+allLabels.length+' labels)...','syncing');
     try{
-        var srcDoc=await PDFLib.PDFDocument.load(lastPdfData);
+        var srcDoc=await PDFLib.PDFDocument.load(lastPdf.data);
         var newDoc=await PDFLib.PDFDocument.create();
         var skuGroups={};
         allLabels.forEach(function(l){
@@ -970,8 +988,8 @@ window.downloadSortedPdf=async function(includeAll){
         }).join(', ');
         setStatus('✅ Sorted PDF downloaded!');
         // Save to scan_history for duplicate detection
-        if(lastPdfLabels){
-            var newToSave=lastPdfLabels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
+        if(lastPdf.labels){
+            var newToSave=lastPdf.labels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
             if(newToSave.length>0){
                 var today=new Date().toISOString().split('T')[0];
                 var ins=newToSave.map(function(l){return{order_id:l.orderId,sku:l.sku,scanned_date:today};});
@@ -991,8 +1009,11 @@ window.downloadSortedPdf=async function(includeAll){
 window.useCardLabels=function(uploadId){
     var upload=pdfUploads.find(function(u){return u.id===uploadId;});
     if(upload&&upload.labels&&upload.labels.length>0){
-        lastPdfLabels=upload.labels;
-        lastPdfLabels._fromCard=true;
+        lastPdf.labels=upload.labels;
+        lastPdf.data=null; // Card labels don't have raw PDF data
+        lastPdf.fromCard=true;
+        lastPdf.fileName=upload.name||'card-labels';
+        setStatus('📋 Loaded '+upload.labels.length+' labels from history card');
     }
 };
 window.togglePdfCard=function(id){openCardId=(openCardId===id)?null:id;renderPdfHistory();};
@@ -1282,6 +1303,9 @@ window.updatePrice=async function(id,val){try{await db.from('stock').update({pri
 
 // ORDERS CRUD
 document.getElementById('addOrderBtn').addEventListener('click',async function(){
+    var btn=document.getElementById('addOrderBtn');
+    btn.disabled=true;btn.textContent='Adding...';
+    // restore at end
     var orderId=document.getElementById('o-id').value.trim(),itemId=document.getElementById('o-item').value,qty=parseInt(document.getElementById('o-qty').value)||1,amt=document.getElementById('o-amt').value;
     if(!orderId||!itemId||!amt){alert('Fill required fields');return;}
     var si=stockData.find(function(x){return x.id===parseInt(itemId);});if(!si)return;
@@ -1293,10 +1317,17 @@ document.getElementById('addOrderBtn').addEventListener('click',async function()
         document.getElementById('o-id').value='';document.getElementById('o-cust').value='';document.getElementById('o-state').value='';document.getElementById('o-item').value='';document.getElementById('o-qty').value='1';document.getElementById('o-amt').value='';document.getElementById('o-recv').value='0';
         await loadStock();await loadOrders();setStatus('✅ Order added!');
     }catch(err){setStatus('❌ '+err.message,'error');}
+    btn.disabled=false;btn.textContent='➕ Add';
 });
 window.delOrder=async function(id){if(!confirm('Delete?'))return;try{await db.from('orders').delete().eq('id',id);await loadOrders();setStatus('✅ Deleted');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.updateRemark=async function(id,val){try{await db.from('orders').update({remark:val||null}).eq('id',id);setStatus('✅ Saved');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.closeModal=function(){document.querySelectorAll('.modal-bg').forEach(function(m){m.classList.remove('show');});};
+// Close modal on ESC key
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+// Close modal on backdrop click
+document.querySelectorAll('.modal-bg').forEach(function(bg){
+    bg.addEventListener('click',function(e){if(e.target===bg)closeModal();});
+});
 
 // ============================================
 // FIXED FILE UPLOAD - Meesho Payment File
@@ -1862,9 +1893,10 @@ window.applyBulkGroup=async function(){
 window.addInventory=async function(){
     var pid=document.getElementById('inv-product').value;
     var size=document.getElementById('inv-size').value;
-    var qty=parseInt(document.getElementById('inv-qty').value)||0;
+    var rawQty=document.getElementById('inv-qty').value;
+    var qty=parseInt(rawQty)||0;
     if(!pid){alert('Select a product');return;}
-    if(isNaN(qty)){alert('Enter quantity');return;}
+    if(!rawQty||rawQty.trim()===''){alert('Enter quantity');return;}
     // Check if exists
     var existing=inventoryData.find(function(i){return i.product_id===parseInt(pid)&&i.size===size;});
     try{
@@ -1883,14 +1915,12 @@ window.addInventory=async function(){
     }catch(err){setStatus('❌ '+err.message,'error');alert('Error: '+err.message);}
 };
 window.updateInventoryQty=async function(id,val){
+    // Save backup before manual edit
     if(!inventoryBackup)inventoryBackup={timestamp:new Date().toISOString(),data:inventoryData.map(function(i){return{id:i.id,product_id:i.product_id,size:i.size,qty:i.qty};})};
     try{
-        var newQty=parseInt(val)||0;
-        var res=await db.from('inventory').update({qty:newQty}).eq('id',id).select();
+        var res=await db.from('inventory').update({qty:parseInt(val)||0}).eq('id',id).select();
         if(res.error)throw new Error(res.error.message);
-        var inv=inventoryData.find(function(i){return i.id===id;});
-        if(inv){inv.qty=newQty;try{await db.from('inventory_history').insert({product_id:inv.product_id,size:inv.size,qty:newQty,changed_at:new Date().toISOString().split('T')[0]});}catch(he){}}
-        await loadInventory();
+        inventoryData.forEach(function(i){if(i.id===id)i.qty=parseInt(val)||0;});
         setStatus('✅ Updated');
     }catch(err){setStatus('❌ '+err.message,'error');}
 };
@@ -1921,8 +1951,8 @@ window.undoLastDispatch=async function(){
     }
 };
 window.confirmDispatch=async function(){
-    if(!lastPdfLabels||lastPdfLabels.length===0){alert('Upload a label PDF first');return;}
-    var newLabels=lastPdfLabels._fromCard?lastPdfLabels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}):lastPdfLabels.filter(function(l){return !l.isDuplicate;});
+    if(!lastPdf.labels||lastPdf.labels.length===0){alert('Upload a label PDF first');return;}
+    var newLabels=lastPdf.fromCard?lastPdf.labels.filter(function(l){return l.orderId&&!l.orderId.startsWith('Unknown');}):lastPdf.labels.filter(function(l){return !l.isDuplicate;});
     if(newLabels.length===0){alert('No labels to dispatch');return;}
     // Map SKU → Product
     var catToProduct={};
@@ -2004,13 +2034,12 @@ window.confirmDispatch=async function(){
         try{
             if(inv){await db.from('inventory').update({qty:after}).eq('id',inv.id);updated++;}
             else{await db.from('inventory').insert({product_id:d.product_id,size:d.size,qty:-actualQty});updated++;}
-            try{await db.from('inventory_history').insert({product_id:d.product_id,size:d.size,qty:after,changed_at:new Date().toISOString().split('T')[0]});}catch(he){console.warn('hist:',he);}
         }catch(e){console.error('Deduct error:',e);}
     }
     await loadInventory();
     // Save to scan_history
-    if(lastPdfLabels){
-        var newToSave=lastPdfLabels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
+    if(lastPdf.labels){
+        var newToSave=lastPdf.labels.filter(function(l){return !l.isDuplicate&&l.orderId&&!l.orderId.startsWith('Unknown');});
         if(newToSave.length>0){
             var today=new Date().toISOString().split('T')[0];
             var ins=newToSave.map(function(l){return{order_id:l.orderId,sku:l.sku,scanned_date:today};});
@@ -2096,28 +2125,9 @@ function renderInventory(){
             html+='<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.25rem">';
             g.items.forEach(function(inv){
                 var qtyColor=inv.qty<0?'#dc2626':inv.qty===0?'#9ca3af':inv.qty<=10?'#c9963b':'#059669';
-                var qtyBg=inv.qty<0?'#fef2f2':inv.qty<=10?'#fffbeb':'#f0fdf4';
-                // History for this size
-                var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                var iHist=(inventoryHistoryData||[]).filter(function(h){return parseInt(h.product_id)===parseInt(inv.product_id)&&h.size===inv.size;});
-                var seenDates={};var histRows=[];
-                iHist.forEach(function(h){if(!seenDates[h.changed_at]){seenDates[h.changed_at]=true;histRows.push(h);}});
-                histRows=histRows.slice(0,3);
-                var histHtml='';
-                if(histRows.length>0){
-                    histHtml='<div style="font-size:0.48rem;color:#6b7280;margin-top:0.25rem;line-height:1.8;text-align:left">';
-                    histRows.forEach(function(h){
-                        var d=new Date(h.changed_at+'T00:00:00');
-                        var lbl=d.getDate()+' '+MN[d.getMonth()];
-                        var hColor=h.qty<0?'#dc2626':h.qty<=10?'#c9963b':'#059669';
-                        histHtml+='<div>📅'+lbl+': <b style="color:'+hColor+'">'+h.qty+'</b></div>';
-                    });
-                    histHtml+='</div>';
-                }
-                html+='<div style="background:'+qtyBg+';border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
+                html+='<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:0.3rem 0.5rem;text-align:center;min-width:70px">';
                 html+='<div style="font-size:0.6rem;color:#6b7280">'+inv.size+'"</div>';
-                html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid '+(inv.qty<0?'#fca5a5':'#c5cfe0')+';border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem">';
-                html+=histHtml;
+                html+='<input type="number" value="'+inv.qty+'" onchange="updateInventoryQty('+inv.id+',this.value)" style="width:50px;text-align:center;border:1px solid #c5cfe0;border-radius:4px;font-size:0.8rem;font-weight:700;color:'+qtyColor+';padding:0.1rem">';
                 html+='<div style="margin-top:0.2rem"><button class="act-btn del" onclick="delInventory('+inv.id+')" style="font-size:0.5rem">🗑️</button></div>';
                 html+='</div>';
             });
@@ -2130,6 +2140,8 @@ function renderInventory(){
 
 // EXPENSES
 window.addExpense=async function(){
+    var btn=document.querySelector('[onclick="addExpense()"]');
+    if(btn){btn.disabled=true;btn.textContent='Adding...';}
     var date=document.getElementById('exp-date').value;
     var cat=document.getElementById('exp-cat').value;
     var amt=parseFloat(document.getElementById('exp-amt').value);
@@ -2147,6 +2159,7 @@ window.addExpense=async function(){
         await loadExpenses();
         setStatus('✅ Expense added');
     }catch(err){setStatus('❌ '+err.message,'error');}
+    if(btn){btn.disabled=false;btn.textContent='➕ Add Expense';}
 };
 window.delExpense=async function(id){
     if(!confirm('Delete this expense?'))return;
@@ -2203,10 +2216,12 @@ function renderExpenses(){
 }
 
 window.exportData=function(){
-    var csv='Type,Name,SKU,Size,Qty,State,Status,Amount,Received\n';
-    stockData.forEach(function(s){csv+='Stock,"'+s.name+'",,'+s.size+','+s.qty+',,,'+s.cost+','+s.price+'\n';});
-    ordersData.forEach(function(o){csv+='Order,"'+o.order_id+'","'+(o.remark||'')+'",'+(o.size||'')+','+(o.qty||1)+','+(o.state||'')+','+(o.status||'')+','+o.amount+','+o.received+'\n';});
+    var csv='Type,Name,SKU,Size,Qty,State,Status,Amount,Received,Date\n';
+    stockData.forEach(function(s){csv+='Stock,"'+s.name+'",,'+s.size+','+s.qty+',,,'+s.cost+','+s.price+',\n';});
+    ordersData.forEach(function(o){csv+='Order,"'+o.order_id+'","'+(o.remark||'')+'",'+(o.size||'')+','+(o.qty||1)+','+(o.state||'')+','+(o.status||'')+','+o.amount+','+o.received+','+(o.order_date||'')+'\n';});
+    expensesData.forEach(function(e){csv+='Expense,"'+(e.description||e.category||'')+'",,,,,,'+(e.amount||0)+',,'+(e.expense_date||'')+'\n';});
     var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='glass-hut-'+new Date().toISOString().split('T')[0]+'.csv';a.click();
+    setStatus('✅ Exported '+ordersData.length+' orders, '+stockData.length+' stock items, '+expensesData.length+' expenses');
 };
 
 // ============================================
@@ -2499,14 +2514,14 @@ function renderStock(){
     if(!tblEl)return;
     var skuSales={};
     ordersData.forEach(function(o){
-        var sku=(o.remark||'').trim().toLowerCase();
+        var sku=normSku(o.remark||'');
         if(!sku)return;
         if(!skuSales[sku])skuSales[sku]={sold:0,received:0};
         skuSales[sku].sold+=(o.qty||1);
         skuSales[sku].received+=(o.received||0);
     });
     tblEl.innerHTML=stockData.length>0?stockData.map(function(x){
-        var key=x.name.trim().toLowerCase();
+        var key=normSku(x.name);
         var sales=skuSales[key]||{sold:0,received:0};
         return'<tr><td style="font-size:0.7rem">'+x.name+'</td><td style="text-align:center;font-weight:600;color:#8b6914">'+(sales.sold||'-')+'</td><td style="color:'+(sales.received>=0?'#059669':'#dc2626')+'">₹'+Math.round(sales.received).toLocaleString()+'</td><td><button class="act-btn del" onclick="delStock('+x.id+')">🗑️</button></td></tr>';
     }).join(''):'<tr><td colspan="4" class="empty">No SKUs synced yet.</td></tr>';
@@ -2515,7 +2530,7 @@ function renderOrders(){
     var filtered=ordersData;
     if(filterPlat!=='all')filtered=filtered.filter(function(x){return x.platform===filterPlat;});
     if(filterStatus!=='all')filtered=filtered.filter(function(x){return x.status===filterStatus;});
-    document.getElementById('ordCnt').textContent=filtered.length;
+    var ordCntEl=document.getElementById('ordCnt');if(ordCntEl)ordCntEl.textContent=filtered.length;
     document.getElementById('ordTbl').innerHTML=filtered.length>0?filtered.map(function(x){
         var sp=x.items?(x.items.length>18?x.items.substring(0,18)+'..':x.items):'-';
         return'<tr><td style="font-size:0.55rem;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+x.order_id+'">'+x.order_id+'</td><td class="product-cell"><span class="product-short" title="'+(x.items||'')+'">'+sp+'</span></td><td style="font-size:0.6rem;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(x.remark||'')+'">'+(x.remark||'-')+'</td><td>'+(x.size||'-')+'"</td><td>'+(x.qty||1)+'</td><td style="font-size:0.55rem">'+(x.state||'-')+'</td><td><span class="badge badge-'+x.platform+'">'+x.platform+'</span></td><td><span class="badge badge-'+(x.status||'pending').toLowerCase()+'">'+(x.status||'?')+'</span></td><td style="font-size:0.55rem">'+x.order_date+'</td><td style="font-weight:600">₹'+x.amount.toLocaleString()+'</td><td style="color:#059669">₹'+x.received.toLocaleString()+'</td><td><button class="act-btn del" onclick="delOrder('+x.id+')">🗑️</button></td></tr>';
