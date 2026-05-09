@@ -335,6 +335,11 @@
                     </div>
                     <div id="inventoryList" style="margin-top:0.5rem"></div>
                 </div>
+                <div class="form-box">
+                    <h4>🕒 Dispatch History by Category</h4>
+                    <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Shows packed labels grouped by category with dispatch dates.</p>
+                    <div id="stockDispatchHistoryByCategory"><div class="loading">Loading history...</div></div>
+                </div>
             </div>
             
             <!-- ORDERS -->
@@ -820,10 +825,11 @@ async function savePdfUpload(upload){
 }
 async function loadPdfHistory(){
     try{var r=await db.from('pdf_uploads').select('*').order('created_at',{ascending:false});
-        if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){pdfUploads=[];renderPdfHistory();return;}throw new Error(r.error.message);}
-        pdfUploads=(r.data||[]).map(function(row){return{id:row.id,name:row.file_name,date:new Date(row.upload_date).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),labels:row.labels||[],newCount:row.new_count||0,dupCount:row.dup_count||0};});
+        if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){pdfUploads=[];renderPdfHistory();renderDispatchHistoryByCategory();return;}throw new Error(r.error.message);}
+        pdfUploads=(r.data||[]).map(function(row){return{id:row.id,name:row.file_name,date:new Date(row.upload_date).toLocaleString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),sortTs:row.upload_date||row.created_at||null,labels:row.labels||[],newCount:row.new_count||0,dupCount:row.dup_count||0};});
         renderPdfHistory();
-    }catch(err){pdfUploads=[];renderPdfHistory();}}
+        renderDispatchHistoryByCategory();
+    }catch(err){pdfUploads=[];renderPdfHistory();renderDispatchHistoryByCategory();}}
 
 var lastPdf={data:null,labels:null,fileName:null,fromCard:false};
 window.handlePdfUpload=async function(input){
@@ -1039,7 +1045,7 @@ window.deleteUpload=async function(id){if(!confirm('Delete this upload and its d
         setStatus('✅ Deleted (upload + scan history)');
     }catch(err){setStatus('❌ '+err.message,'error');}};
 window.clearAllUploads=async function(){if(!confirm('Delete ALL upload history?'))return;
-    try{await db.from('pdf_uploads').delete().neq('id',0);pdfUploads=[];openCardId=null;renderPdfHistory();setStatus('✅ All cleared');}catch(err){setStatus('❌ '+err.message,'error');}};
+    try{await db.from('pdf_uploads').delete().neq('id',0);pdfUploads=[];openCardId=null;renderPdfHistory();renderDispatchHistoryByCategory();setStatus('✅ All cleared');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.clearScanHistory=async function(){
     if(!confirm('⚠️ Delete ALL duplicate detection history?\nAll labels will show as "New" next time.'))return;
     setStatus('🔄 Clearing...','syncing');
@@ -1066,6 +1072,70 @@ function renderPdfHistory(){
         html+='<div class="pdf-card-body'+(isOpen?' open':'')+'" id="pdfBody-'+u.id+'">';
         if(isOpen)html+=buildCardDetails(u);
         html+='</div></div>';
+    });
+    container.innerHTML=html;
+}
+
+function renderDispatchHistoryByCategory(){
+    var container=document.getElementById('stockDispatchHistoryByCategory');
+    if(!container)return;
+    if(!pdfUploads||pdfUploads.length===0){
+        container.innerHTML='<div class="empty" style="font-size:0.7rem">No dispatch history yet.</div>';
+        return;
+    }
+    var grouped={};
+    pdfUploads.forEach(function(upload){
+        var labels=(upload&&upload.labels)||[];
+        var dispatchDate=upload&&upload.date?upload.date:'-';
+        var sortTs=upload&&upload.sortTs?upload.sortTs:null;
+        var fileName=upload&&upload.name?upload.name:'-';
+        var totalNew=0;
+        var catCounts={};
+        labels.forEach(function(l){
+            if(l&&l.isDuplicate)return;
+            var match=findCategory(l&&l.sku?l.sku:'');
+            var cat=match?match.category:'Uncategorized';
+            if(!catCounts[cat])catCounts[cat]=0;
+            catCounts[cat]++;
+            totalNew++;
+        });
+        Object.keys(catCounts).forEach(function(cat){
+            if(!grouped[cat])grouped[cat]=[];
+            grouped[cat].push({
+                date:dispatchDate,
+                sortTs:sortTs,
+                fileName:fileName,
+                qty:catCounts[cat],
+                totalNew:totalNew
+            });
+        });
+    });
+    var cats=Object.keys(grouped).sort(function(a,b){return a.localeCompare(b);});
+    if(cats.length===0){
+        container.innerHTML='<div class="empty" style="font-size:0.7rem">No new dispatch labels in history.</div>';
+        return;
+    }
+    var html='';
+    cats.forEach(function(cat){
+        var rows=grouped[cat];
+        rows.sort(function(a,b){return new Date(b.sortTs||0)-new Date(a.sortTs||0);});
+        var total=rows.reduce(function(sum,r){return sum+(r.qty||0);},0);
+        html+='<div style="border:1px solid #e2e8f0;border-radius:10px;padding:0.6rem;margin-bottom:0.6rem;background:white">';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.4rem">';
+        html+='<div style="font-weight:700;color:#1e3a5f">'+escapeHtml(cat)+'</div>';
+        html+='<div style="font-size:0.7rem;color:#059669;font-weight:700">Total: '+total+' labels</div>';
+        html+='</div>';
+        html+='<div style="overflow-x:auto"><table style="width:100%;font-size:0.7rem"><thead><tr><th style="text-align:left;padding:0.25rem;border-bottom:1px solid #e2e8f0">Date</th><th style="text-align:left;padding:0.25rem;border-bottom:1px solid #e2e8f0">Source</th><th style="text-align:center;padding:0.25rem;border-bottom:1px solid #e2e8f0">Category Qty</th><th style="text-align:center;padding:0.25rem;border-bottom:1px solid #e2e8f0">Packed in File</th></tr></thead><tbody>';
+        rows.forEach(function(r){
+            html+='<tr style="border-bottom:1px solid #f1f5f9">';
+            html+='<td style="padding:0.25rem;color:#334155">'+escapeHtml(r.date||'-')+'</td>';
+            html+='<td style="padding:0.25rem;color:#64748b">'+escapeHtml(r.fileName||'-')+'</td>';
+            html+='<td style="padding:0.25rem;text-align:center;font-weight:700;color:#8b6914">'+(r.qty||0)+'</td>';
+            html+='<td style="padding:0.25rem;text-align:center;color:#475569">'+(r.totalNew||0)+'</td>';
+            html+='</tr>';
+        });
+        html+='</tbody></table></div>';
+        html+='</div>';
     });
     container.innerHTML=html;
 }
@@ -2510,6 +2580,7 @@ function renderDashboard(){
 function renderStock(){
     var cntEl=document.getElementById('stockCnt');
     if(cntEl)cntEl.textContent=stockData.length;
+    renderDispatchHistoryByCategory();
     var tblEl=document.getElementById('stockTbl');
     if(!tblEl)return;
     var skuSales={};
