@@ -336,7 +336,10 @@
                     <div id="inventoryList" style="margin-top:0.5rem"></div>
                 </div>
                 <div class="form-box">
-                    <h4>🕒 Dispatch History by Category</h4>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                        <h4 style="margin:0">🕒 Dispatch History by Category</h4>
+                        <button class="btn btn-danger btn-sm" onclick="clearAllUploads()" style="font-size:0.65rem">🗑️ Clear History</button>
+                    </div>
                     <p style="font-size:0.7rem;color:#6b7280;margin-bottom:0.5rem">Shows packed labels grouped by category with dispatch dates.</p>
                     <div id="stockDispatchHistoryByCategory"><div class="loading">Loading history...</div></div>
                 </div>
@@ -1083,11 +1086,17 @@ function renderDispatchHistoryByCategory(){
         container.innerHTML='<div class="empty" style="font-size:0.7rem">No dispatch history yet.</div>';
         return;
     }
+    var cutoff=new Date();
+    cutoff.setHours(0,0,0,0);
+    cutoff.setDate(cutoff.getDate()-1); // today + yesterday
     var grouped={};
     pdfUploads.forEach(function(upload){
+        var sortTsRaw=upload&&upload.sortTs?upload.sortTs:null;
+        var sortDt=sortTsRaw?new Date(sortTsRaw):null;
+        if(!sortDt||isNaN(sortDt.getTime())||sortDt<cutoff)return;
         var labels=(upload&&upload.labels)||[];
         var dispatchDate=upload&&upload.date?upload.date:'-';
-        var sortTs=upload&&upload.sortTs?upload.sortTs:null;
+        var sortTs=sortTsRaw;
         var fileName=upload&&upload.name?upload.name:'-';
         var totalNew=0;
         var catCounts={};
@@ -1112,7 +1121,7 @@ function renderDispatchHistoryByCategory(){
     });
     var cats=Object.keys(grouped).sort(function(a,b){return a.localeCompare(b);});
     if(cats.length===0){
-        container.innerHTML='<div class="empty" style="font-size:0.7rem">No new dispatch labels in history.</div>';
+        container.innerHTML='<div class="empty" style="font-size:0.7rem">No dispatch history in the last 2 days.</div>';
         return;
     }
     var html='';
