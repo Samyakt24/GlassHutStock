@@ -473,6 +473,24 @@
                         <div class="form-grp" style="align-self:flex-end"><button class="btn btn-primary" onclick="addSku()">➕ Add SKU</button></div>
                     </div>
                 </div>
+                <div class="form-box" style="background:#fef3c7;border:2px solid #fbbf24">
+                    <h4 style="color:#92400e">⚠️ Unmapped SKUs from Orders</h4>
+                    <p style="font-size:0.7rem;color:#92400e;margin-bottom:0.5rem">These SKU names from your orders are not mapped to any category yet. Select them and assign to a category.</p>
+                    <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap">
+                        <label style="font-size:0.7rem;color:#92400e">Assign to:</label>
+                        <select id="bulkAssignCat" style="padding:0.3rem;border:1px solid #d97706;border-radius:6px;font-size:0.7rem">
+                            <option value="">-- Select Category --</option>
+                            <option value="Light Multi 24">Light Multi 24</option>
+                            <option value="Light Multi 12">Light Multi 12</option>
+                            <option value="Dark Multi 24">Dark Multi 24</option>
+                            <option value="Dark Multi 12">Dark Multi 12</option>
+                            <option value="GOLD Multi 24">GOLD Multi 24</option>
+                        </select>
+                        <button class="btn btn-warn btn-sm" onclick="bulkAssignSkus()">Assign Selected</button>
+                        <button class="btn btn-sm" onclick="showUnmappedSkus()" style="font-size:0.65rem;background:#fef3c7;color:#92400e;border:1px solid #fbbf24">🔄 Refresh</button>
+                    </div>
+                    <div id="unmappedSkusList" style="max-height:200px;overflow-y:auto"></div>
+                </div>
                 <div class="card">
                     <div class="card-header"><span>🏷️ SKU Mappings (<span id="skuCnt">0</span>)</span></div>
                     <div class="card-body" id="skuContainer"><div class="loading">Loading...</div></div>
@@ -739,7 +757,77 @@ function refreshCategoryDropdown(){
     });
     sel.innerHTML+='<option value="__new__">➕ Add New Category...</option>';
     if(current&&current!=='__new__')sel.value=current;
+    // Also update bulk assign dropdown
+    var bulkSel=document.getElementById('bulkAssignCat');
+    if(bulkSel){
+        bulkSel.innerHTML='<option value="">-- Select Category --</option>';
+        defaults.concat(custom.sort()).forEach(function(c){
+            bulkSel.innerHTML+='<option value="'+c+'">'+c+'</option>';
+        });
+    }
 }
+window.showUnmappedSkus=function(){
+    var container=document.getElementById('unmappedSkusList');
+    // Get all SKU names from orders
+    var orderSkus={};
+    ordersData.forEach(function(o){
+        var sku=o.remark||o.items;
+        if(sku){
+            var norm=normSku(sku);
+            if(!orderSkus[norm])orderSkus[norm]={original:sku,count:0};
+            orderSkus[norm].count++;
+        }
+    });
+    // Get mapped SKU names
+    var mappedSkus={};
+    skuData.forEach(function(s){
+        var norm=normSku(s.sku_name);
+        mappedSkus[norm]=s.category;
+    });
+    // Find unmapped
+    var unmapped=Object.keys(orderSkus).filter(function(s){return !mappedSkus[s];});
+    if(unmapped.length===0){
+        container.innerHTML='<div style="color:#065f46;font-size:0.75rem;padding:0.5rem;background:#d1fae5;border-radius:6px">✅ All SKUs from orders are mapped!</div>';
+        return;
+    }
+    var html='<div style="font-size:0.65rem;color:#6b7280;margin-bottom:0.5rem">Found '+unmapped.length+' unmapped SKU names:</div>';
+    html+='<div style="display:flex;flex-direction:column;gap:0.3rem">';
+    unmapped.sort().forEach(function(normSku){
+        var orig=orderSkus[normSku].original;
+        var count=orderSkus[normSku].count;
+        html+='<label style="display:flex;align-items:center;gap:0.4rem;padding:0.3rem;background:white;border:1px solid #d97706;border-radius:6px;cursor:pointer">'+
+            '<input type="checkbox" value="'+escapeAttr(normSku)+'" data-original="'+escapeAttr(orig)+'" style="cursor:pointer">'+
+            '<span style="font-size:0.7rem;color:#1e3a5f;flex:1;word-break:break-all">'+escapeHtml(orig)+'</span>'+
+            '<span style="font-size:0.6rem;color:#92400e;background:#fef3c7;padding:0.1rem 0.3rem;border-radius:4px">'+count+' orders</span>'+
+            '</label>';
+    });
+    html+='</div>';
+    container.innerHTML=html;
+};
+window.bulkAssignSkus=async function(){
+    var cat=document.getElementById('bulkAssignCat').value;
+    if(!cat){alert('Please select a category first');return;}
+    var checkboxes=document.querySelectorAll('#unmappedSkusList input[type="checkbox"]:checked');
+    if(checkboxes.length===0){alert('Please select at least one SKU to assign');return;}
+    var toAssign=Array.from(checkboxes).map(function(cb){return{sku:cb.value,original:cb.dataset.original};});
+    setStatus('Assigning '+toAssign.length+' SKUs...','syncing');
+    var added=0;
+    for(var i=0;i<toAssign.length;i++){
+        var t=toAssign[i];
+        try{
+            // Check if already exists
+            if(skuData.some(function(s){return normSku(s.sku_name)===t.sku;})){
+                continue;
+            }
+            var res=await db.from('sku_map').insert({sku_name:t.original,category:cat});
+            if(!res.error)added++;
+        }catch(e){}
+    }
+    await loadSkus();
+    await refreshData();
+    showUnmappedSkus(); // Refresh the list
+    setStatus('✅ Assigned '+added+' SKUs to '+cat);
+};
 window.addSku=addSku;
 window.deleteSku=async function(id){if(!confirm('Remove this SKU?'))return;try{await db.from('sku_map').delete().eq('id',id);await loadSkus();setStatus('✅ SKU removed');}catch(err){setStatus('❌ '+err.message,'error');}};
 window.editCategory=async function(oldName){
@@ -1430,7 +1518,7 @@ function getStockOptions(sel){return'<option value="">--</option>'+stockData.map
 document.addEventListener('change',function(e){if(e.target.id==='o-item'){var opt=e.target.options[e.target.selectedIndex];if(opt.value){document.getElementById('o-size').value=opt.dataset.size;document.getElementById('o-amt').value=opt.dataset.price;}}});
 
 // TABS
-document.querySelectorAll('.tab-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='stock'){renderInventory();}});});
+document.querySelectorAll('.tab-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='stock'){renderInventory();}if(btn.dataset.tab==='sku'){setTimeout(showUnmappedSkus,100);}});});
 document.querySelectorAll('.plat-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.plat-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');platform=btn.dataset.p;});});
 document.querySelectorAll('[data-f],[data-s]').forEach(function(btn){btn.addEventListener('click',function(){if(btn.dataset.f){document.querySelectorAll('.filter-btn[data-f]').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');filterPlat=btn.dataset.f;}if(btn.dataset.s){if(btn.classList.contains('active')){btn.classList.remove('active');filterStatus='all';}else{document.querySelectorAll('.filter-btn[data-s]').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');filterStatus=btn.dataset.s;}}renderOrders();});});
 
