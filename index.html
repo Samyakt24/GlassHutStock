@@ -306,7 +306,7 @@
                 </div>
                 <div id="alertBox"></div>
                 <div class="card" style="margin-bottom:1rem"><div class="card-header">💰 Profit Summary</div><div class="card-body" id="dashProfit"><div class="loading">Loading...</div></div></div>
-                <div class="card" style="margin-bottom:1rem"><div class="card-header">📊 Sales by Product</div><div class="card-body" id="dashSalesByProduct"><div class="loading">Loading...</div></div></div>
+                <div class="card" style="margin-bottom:1rem"><div class="card-header">📊 Sales by SKU</div><div class="card-body" id="dashSalesBySku"><div class="loading">Loading...</div></div></div>
             </div>
             
             <!-- STOCK -->
@@ -2603,32 +2603,34 @@ function renderDashboard(){
     } else {
         document.getElementById('alertBox').innerHTML='';
     }
-    // Sales by Product
-    var productSales={},productQty={};
+    // Sales by SKU
+    var skuSales={},skuQty={};
     ordersData.forEach(function(o){
-        var item=o.items||o.remark||'Unknown';
-        var cat=findCategory(item);
-        var prodName=cat?cat.category:(item||'Unknown');
-        if(!productSales[prodName]){productSales[prodName]=0;productQty[prodName]=0;}
-        productSales[prodName]+=(o.received||0);
-        productQty[prodName]+=(o.qty||1);
+        var sku=o.remark||o.items||'Unknown';
+        if(!skuSales[sku]){skuSales[sku]=0;skuQty[sku]=0;}
+        skuSales[sku]+=(o.received||0);
+        skuQty[sku]+=(o.qty||1);
     });
-    var prodArr=Object.keys(productSales).map(function(k){return{name:k,amount:productSales[k],qty:productQty[k]};}).sort(function(a,b){return b.amount-a.amount;});
-    var totalSalesAmt=prodArr.reduce(function(s,p){return s+p.amount;},0);
-    var maxSales=prodArr.length>0?prodArr[0].amount:1;
-    var salesHtml='<div style="font-size:0.65rem;color:#6b7280;margin-bottom:0.5rem">Total Revenue: ₹'+Math.round(totalSalesAmt).toLocaleString()+' | '+ordersData.length+' orders</div>';
-    if(prodArr.length>0){
-        salesHtml+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.5rem">';
-        prodArr.forEach(function(p,i){
-            var pct=Math.round(p.amount/maxSales*100);
+    var skuArr=Object.keys(skuSales).map(function(k){return{name:k,amount:skuSales[k],qty:skuQty[k]};}).sort(function(a,b){return b.amount-a.amount;});
+    var totalSalesAmt=skuArr.reduce(function(s,p){return s+p.amount;},0);
+    var maxSales=skuArr.length>0?skuArr[0].amount:1;
+    var salesHtml='<div style="font-size:0.65rem;color:#6b7280;margin-bottom:0.5rem">Total Revenue: ₹'+Math.round(totalSalesAmt).toLocaleString()+' | '+ordersData.length+' orders | '+skuArr.length+' unique SKUs</div>';
+    if(skuArr.length>0){
+        salesHtml+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.5rem">';
+        skuArr.forEach(function(s,i){
+            var pct=Math.round(s.amount/maxSales*100);
+            var cat=findCategory(s.name);
             var color='#1e3a5f';
-            if(p.name.includes('Light'))color='#eab308';
-            else if(p.name.includes('Dark'))color='#818cf8';
-            else if(p.name.includes('GOLD'))color='#fb923c';
+            if(cat&&cat.category){
+                if(cat.category.includes('Light'))color='#eab308';
+                else if(cat.category.includes('Dark'))color='#818cf8';
+                else if(cat.category.includes('GOLD'))color='#fb923c';
+            }
+            var catBadge=cat&&cat.category?'<span style="background:#f0f4ff;color:#1e3a5f;padding:0.1rem 0.25rem;border-radius:4px;font-size:0.55rem;margin-left:0.25rem">'+cat.category+'</span>':'';
             salesHtml+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:0.6rem;transition:all 0.2s;cursor:default">'+
-                '<div style="font-weight:600;font-size:0.7rem;color:#1e3a5f;margin-bottom:0.3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+escapeAttr(p.name)+'">'+escapeHtml(p.name)+'</div>'+
-                '<div style="font-weight:700;font-size:0.9rem;color:'+color+'">₹'+Math.round(p.amount).toLocaleString()+'</div>'+
-                '<div style="font-size:0.6rem;color:#6b7280;margin-top:0.2rem">'+p.qty+' units</div>'+
+                '<div style="font-weight:600;font-size:0.7rem;color:#1e3a5f;margin-bottom:0.3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+escapeAttr(s.name)+'">'+escapeHtml(s.name)+catBadge+'</div>'+
+                '<div style="font-weight:700;font-size:0.9rem;color:'+color+'">₹'+Math.round(s.amount).toLocaleString()+'</div>'+
+                '<div style="font-size:0.6rem;color:#6b7280;margin-top:0.2rem">'+s.qty+' units</div>'+
                 '<div style="background:#e2e8f0;border-radius:3px;height:6px;margin-top:0.4rem;overflow:hidden"><div style="background:linear-gradient(90deg,'+color+',#64748b);height:100%;width:'+pct+'%;border-radius:3px"></div></div>'+
                 '</div>';
         });
@@ -2636,7 +2638,7 @@ function renderDashboard(){
     } else {
         salesHtml+='<div class="empty">No orders yet</div>';
     }
-    document.getElementById('dashSalesByProduct').innerHTML=salesHtml;
+    document.getElementById('dashSalesBySku').innerHTML=salesHtml;
 
     // Profit Summary
     var profitEl=document.getElementById('dashProfit');
