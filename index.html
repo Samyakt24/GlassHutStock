@@ -2691,38 +2691,42 @@ function renderDashboard(){
     } else {
         document.getElementById('alertBox').innerHTML='';
     }
-    // Sales by SKU
-    var skuSales={},skuQty={};
+    // Sales by SKU Category (grouped by categories defined in SKU tab)
+    var catSales={},catQty={};
     ordersData.forEach(function(o){
         var sku=o.remark||o.items||'Unknown';
-        if(!skuSales[sku]){skuSales[sku]=0;skuQty[sku]=0;}
-        skuSales[sku]+=(o.received||0);
-        skuQty[sku]+=(o.qty||1);
+        var cat=findCategory(sku);
+        var catName=cat&&cat.category?cat.category:'Unmapped';
+        if(!catSales[catName]){catSales[catName]=0;catQty[catName]=0;}
+        catSales[catName]+=(o.received||0);
+        catQty[catName]+=(o.qty||1);
     });
-    var skuArr=Object.keys(skuSales).map(function(k){return{name:k,amount:skuSales[k],qty:skuQty[k]};}).sort(function(a,b){return b.amount-a.amount;});
-    var totalSalesAmt=skuArr.reduce(function(s,p){return s+p.amount;},0);
-    var maxSales=skuArr.length>0?skuArr[0].amount:1;
-    var salesHtml='<div style="font-size:0.65rem;color:#6b7280;margin-bottom:0.5rem">Total Revenue: ₹'+Math.round(totalSalesAmt).toLocaleString()+' | '+ordersData.length+' orders | '+skuArr.length+' unique SKUs</div>';
-    if(skuArr.length>0){
-        salesHtml+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.5rem">';
-        skuArr.forEach(function(s,i){
-            var pct=Math.round(s.amount/maxSales*100);
-            var cat=findCategory(s.name);
+    var catArr=Object.keys(catSales).map(function(k){return{name:k,amount:catSales[k],qty:catQty[k]};}).sort(function(a,b){return b.amount-a.amount;});
+    var totalSalesAmt=catArr.reduce(function(s,p){return s+p.amount;},0);
+    var maxSales=catArr.length>0?catArr[0].amount:1;
+    var unmappedCount=catSales['Unmapped']||0;
+    var salesHtml='<div style="font-size:0.65rem;color:#6b7280;margin-bottom:0.5rem">Total Revenue: ₹'+Math.round(totalSalesAmt).toLocaleString()+' | '+ordersData.length+' orders</div>';
+    if(catArr.length>0){
+        salesHtml+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.5rem">';
+        catArr.forEach(function(c,i){
+            var pct=Math.round(c.amount/maxSales*100);
             var color='#1e3a5f';
-            if(cat&&cat.category){
-                if(cat.category.includes('Light'))color='#eab308';
-                else if(cat.category.includes('Dark'))color='#818cf8';
-                else if(cat.category.includes('GOLD'))color='#fb923c';
-            }
-            var catBadge=cat&&cat.category?'<span style="background:#f0f4ff;color:#1e3a5f;padding:0.1rem 0.25rem;border-radius:4px;font-size:0.55rem;margin-left:0.25rem">'+cat.category+'</span>':'';
-            salesHtml+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:0.6rem;transition:all 0.2s;cursor:default">'+
-                '<div style="font-weight:600;font-size:0.7rem;color:#1e3a5f;margin-bottom:0.3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+escapeAttr(s.name)+'">'+escapeHtml(s.name)+catBadge+'</div>'+
-                '<div style="font-weight:700;font-size:0.9rem;color:'+color+'">₹'+Math.round(s.amount).toLocaleString()+'</div>'+
-                '<div style="font-size:0.6rem;color:#6b7280;margin-top:0.2rem">'+s.qty+' units</div>'+
+            if(c.name.includes('Light'))color='#eab308';
+            else if(c.name.includes('Dark'))color='#818cf8';
+            else if(c.name.includes('GOLD'))color='#fb923c';
+            else if(c.name==='Unmapped')color='#dc2626';
+            var borderColor=c.name==='Unmapped'?'#fca5a5':color;
+            salesHtml+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid '+borderColor+';border-radius:10px;padding:0.6rem;transition:all 0.2s;cursor:default">'+
+                '<div style="font-weight:600;font-size:0.75rem;color:#1e3a5f;margin-bottom:0.3rem">'+escapeHtml(c.name)+'</div>'+
+                '<div style="font-weight:700;font-size:0.95rem;color:'+color+'">₹'+Math.round(c.amount).toLocaleString()+'</div>'+
+                '<div style="font-size:0.6rem;color:#6b7280;margin-top:0.2rem">'+c.qty+' units</div>'+
                 '<div style="background:#e2e8f0;border-radius:3px;height:6px;margin-top:0.4rem;overflow:hidden"><div style="background:linear-gradient(90deg,'+color+',#64748b);height:100%;width:'+pct+'%;border-radius:3px"></div></div>'+
                 '</div>';
         });
         salesHtml+='</div>';
+        if(unmappedCount>0){
+            salesHtml+='<div style="margin-top:0.5rem;padding:0.5rem;background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;font-size:0.65rem;color:#92400e">⚠️ '+unmappedCount+' orders have unmapped SKUs. Go to SKU tab to assign them to categories.</div>';
+        }
     } else {
         salesHtml+='<div class="empty">No orders yet</div>';
     }
