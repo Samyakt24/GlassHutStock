@@ -1845,7 +1845,7 @@ window.handleFileUpload=async function(input){
             statusDiv.innerHTML='<div class="alert alert-info">Uploading <b>'+allOrders.length+'</b> orders'+(mergedWithDb>0?' ('+mergedWithDb+' merged with existing)':'')+'...</div>';
 
             // Step 3: Upsert ALL orders in batches (insert new + update existing)
-            var BATCH=10;
+            var BATCH=500;
             for(var b=0;b<allOrders.length;b+=BATCH){
                 var batch=allOrders.slice(b,b+BATCH);
                 var batchOk=false;
@@ -1875,8 +1875,8 @@ window.handleFileUpload=async function(input){
                 var pct=Math.round(done/allOrders.length*100);
                 statusDiv.innerHTML='<div class="alert alert-info" style="font-size:0.85rem">Uploading... <b>'+pct+'%</b> ('+imp+'/'+allOrders.length+')'+(errors>0?' <span style="color:red">'+errors+' errors</span>':'')+'</div>';
 
-                // 500ms delay between batches to avoid rate limiting
-                await new Promise(function(ok){setTimeout(ok,500);});
+                // small pause between batches (large batches mean very few requests now)
+                await new Promise(function(ok){setTimeout(ok,50);});
             }
 
             // Step 3: Reload and verify
