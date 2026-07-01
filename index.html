@@ -1555,7 +1555,7 @@ document.addEventListener('change',function(e){if(e.target.id==='o-item'){var op
 
 // TABS
 // ===== New-listing pricing (data-driven, auto-updates on upload) =====
-var PR_ADS=0.10, PR_PKG=0, PR_DMG=0;                 // ads baked in; add packaging into the cost you type; breakage unknown
+var PR_ADS=0.10, PR_PKG=0, PR_BADRET=0, PR_RTODMG=0.25;   // ads baked in; packaging folded into the cost you type; bad customer-return rate unknown (0 for now); ~25% of RTO come back damaged (lost stock)
 var PR_FALLBACK={Rdel:0.79,Rret:0.09,Rrto:0.12,keepDel:0.889,Sret:-143,Srto:0};
 function prParams(){
     try{
@@ -1590,9 +1590,9 @@ function prCalc(){
     var C=parseFloat(el.value)||0, p=prParams();
     var K=p.Rdel*p.keepDel - PR_ADS;
     var money=function(n){return '₹'+Math.round(n).toLocaleString('en-IN');};
-    function priceFor(profit){var Cexp=C*p.Rdel+C*(p.Rret+p.Rrto)*PR_DMG+PR_PKG;
+    function priceFor(profit){var Cexp=C*p.Rdel+C*(p.Rret*PR_BADRET+p.Rrto*PR_RTODMG)+PR_PKG;
         var drag=p.Rret*p.Sret+p.Rrto*p.Srto; return K>0?(Cexp-drag+profit)/K:Infinity;}
-    function profitAt(P){var Cexp=C*p.Rdel+C*(p.Rret+p.Rrto)*PR_DMG+PR_PKG;
+    function profitAt(P){var Cexp=C*p.Rdel+C*(p.Rret*PR_BADRET+p.Rrto*PR_RTODMG)+PR_PKG;
         return P*K+(p.Rret*p.Sret+p.Rrto*p.Srto)-Cexp;}
     var floor=priceFor(0), reco=priceFor(0.35*C);
     document.getElementById('pr-reco').textContent=isFinite(reco)?money(reco):'—';
@@ -1619,7 +1619,8 @@ function prCalc(){
             var Pb=reco;
             var gross=p.Rdel*Pb, fee=p.Rdel*Pb*(1-p.keepDel),
                 retDrag=-(p.Rret*p.Sret+p.Rrto*p.Srto), ads=PR_ADS*Pb, cost=p.Rdel*C,
-                prof=gross-fee-retDrag-ads-cost;
+                lostStock=C*(p.Rret*PR_BADRET+p.Rrto*PR_RTODMG),
+                prof=gross-fee-retDrag-ads-cost-lostStock;
             function line(lbl,amt,sign,strong){
                 return '<div style="display:flex;justify-content:space-between;padding:4px 0;'+(strong?'border-top:1px solid #e5e9f2;margin-top:3px;padding-top:7px;font-weight:800':'')+'">'+
                     '<span style="color:'+(strong?'#141b2e':'#4a5570')+'">'+lbl+'</span>'+
@@ -1633,6 +1634,7 @@ function prCalc(){
                 line('Returns &amp; RTO penalties',retDrag,-1,false)+
                 line('Ad spend (~10%)',ads,-1,false)+
                 line('Product cost',cost,-1,false)+
+                line('Damaged/wrong returns (lost stock)',lostStock,-1,false)+
                 line('Your profit / unit',prof,1,true)+
                 '</div>';
         }
