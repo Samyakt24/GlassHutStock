@@ -282,6 +282,7 @@
             </div>
         </header>
         <nav class="tabs"><div class="tabs-content">
+            <button class="tab-btn" data-tab="pricing">🧮 Pricing</button>
             <button class="tab-btn active" data-tab="dashboard">📊 Dash</button>
             <button class="tab-btn" data-tab="stock">📦 Stock</button>
             <button class="tab-btn" data-tab="orders">🛒 Orders</button>
@@ -511,6 +512,66 @@
                 </div>
                 <div id="pdfHistoryList"></div>
             </div>
+            <!-- Paste this right before the closing </main> tag -->
+<div class="tab-content" id="tab-pricing">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+        
+        <!-- Inputs Box -->
+        <div class="form-box">
+            <h4>🧮 Dynamic Price Planner</h4>
+            <p style="font-size:0.7rem;color:#6b7280;margin-bottom:1rem;">The engine will analyze your live data to factor in your real return penalties, RTO ratios, and platform deductions.</p>
+            
+            <div class="form-group">
+                <label>Product Variant</label>
+                <select id="calc-variant">
+                    <option value="12">12 Chudiyan (Bangles)</option>
+                    <option value="24">24 Chudiyan (Bangles)</option>
+                    <option value="all">Overall / Mixed Catalog</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Product Material Cost (COGS) [₹] *</label>
+                <input type="number" id="calc-cogs" placeholder="e.g. 40" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label>Box & Bubble Wrap Cost [₹]</label>
+                <input type="number" id="calc-pack" value="8" min="0">
+            </div>
+            
+            <button class="login-btn" onclick="calculateLivePricing()" style="margin-top: 1rem;">Generate Risk-Adjusted Strategy</button>
+        </div>
+
+        <!-- Account Metrics Learned Box -->
+        <div class="form-box" style="background: #f0f4ff; border-color: #2c5282;">
+            <h4 style="color: #1e3a5f;">📊 Learned Account Metrics</h4>
+            <div id="calc-metrics-report" style="font-size: 0.75rem; color: #374151; line-height: 1.6;">
+                Fill in your costs and hit calculate to view your profile's hidden margins.
+            </div>
+        </div>
+    </div>
+
+    <!-- Pricing Matrix Card -->
+    <div class="card" style="margin-top: 1.5rem;">
+        <div class="card-header">💰 Risk-Adjusted Pricing Matrix</div>
+        <div class="card-body" style="overflow-x: auto;">
+            <table style="width: 100%; text-align: left;">
+                <thead>
+                    <tr style="background: #edf2f9;">
+                        <th style="padding: 0.5rem;">Target Net Margin</th>
+                        <th style="padding: 0.5rem;">Recommended Listing Price</th>
+                        <th style="padding: 0.5rem;">Expected Bank Payout</th>
+                        <th style="padding: 0.5rem;">Net Take-Home Profit / Dispatched Unit</th>
+                    </tr>
+                </thead>
+                <tbody id="calc-matrix-rows">
+                    <tr><td colspan="4" class="empty">Enter product parameters above to calculate.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
         </main>
     </div>
     
@@ -618,6 +679,118 @@ window.forgotPassword=async function(){
         alert('✅ Password reset link sent to '+email+'\nCheck your inbox!');
     }catch(err){alert('❌ '+err.message);}
 };
+    function calculateLivePricing() {
+    if (!ordersData || ordersData.length === 0) {
+        alert("Please upload or sync your orders data before utilizing the calculator.");
+        return;
+    }
+
+    var variantSelection = document.getElementById("calc-variant").value;
+    var cogs = parseFloat(document.getElementById("calc-cogs").value);
+    var pack = parseFloat(document.getElementById("calc-pack").value) || 0;
+
+    if (isNaN(cogs) || cogs < 0) {
+        alert("Please provide a valid material cost price.");
+        return;
+    }
+
+    // 1. Filter live database by packet config variant string match
+    var targetSubset = ordersData.filter(function(o) {
+        var skuName = (o.remark || o.items || "").toLowerCase();
+        if (variantSelection === "24") return skuName.indexOf("24") !== -1;
+        if (variantSelection === "12") return skuName.indexOf("12") !== -1;
+        return true; 
+    });
+
+    // Fallback if that specific variant hasn't been uploaded yet
+    if (targetSubset.length < 5) { targetSubset = ordersData; }
+
+    // 2. Metrics Accumulation Engine
+    var total = targetSubset.length;
+    var deliveredCount = 0, returnCount = 0, rtoCount = 0;
+    var sumDeliveredListing = 0, sumDeliveredSettlement = 0;
+    var sumReturnSettlement = 0, sumRtoSettlement = 0;
+
+    targetSubset.forEach(function(o) {
+        var status = (o.status || "").toLowerCase();
+        var amt = parseFloat(o.amount) || 0;
+        var recv = parseFloat(o.received) || 0;
+
+        if (status === "delivered") {
+            deliveredCount++;
+            sumDeliveredListing += amt;
+            sumDeliveredSettlement += recv;
+        } else if (status === "return" || status === "exchange") {
+            returnCount++;
+            sumReturnSettlement += recv;
+        } else if (status === "rto") {
+            rtoCount++;
+            sumRtoSettlement += recv;
+        }
+    });
+
+    // 3. Compute Probabilistic Rates
+    var r_del = total > 0 ? (deliveredCount / total) : 0.70;
+    var r_ret = total > 0 ? (returnCount / total) : 0.10;
+    var r_rto = total > 0 ? (rtoCount / total) : 0.10;
+
+    // Platform forward deduction mapping
+    var d_pct = sumDeliveredListing > 0 ? ((sumDeliveredListing - sumDeliveredSettlement) / sumDeliveredListing) : 0.08;
+
+    // Financial impacts
+    var l_ret = returnCount > 0 ? (sumReturnSettlement / returnCount) : -156.00;
+    var l_rto = rtoCount > 0 ? (sumRtoSettlement / rtoCount) : 0.00;
+
+    // 4. Print Dynamic Diagnostic Profile
+    var reportEl = document.getElementById("calc-metrics-report");
+    reportEl.innerHTML = 
+        "📈 <b>Variant Sample Population:</b> " + total + " orders parsed<br>" +
+        "• <b>Real Account Forward Fee:</b> " + (d_pct * 100).toFixed(2) + "% deducted on delivery<br>" +
+        "• <b>Delivery Fulfilment Ratio:</b> " + (r_del * 100).toFixed(1) + "%<br>" +
+        "• <b>Customer Return Overhead:</b> " + (r_ret * 100).toFixed(1) + "%<br>" +
+        "• <b>Courier Return (RTO) Ratio:</b> " + (r_rto * 100).toFixed(1) + "%<br>" +
+        "• <b>Empirical Customer Return Penalty:</b> ₹" + Math.abs(l_ret).toFixed(2) + "<br><br>" +
+        "⚡ <i>The matrices below have automatically priced in a conservative 2% transit breakage risk factor on glass returns.</i>";
+
+    // 5. Generate Pricing Scenarios
+    var glassShatterRisk = 0.02;
+    var expected_cost = (cogs * r_del) + (cogs * (r_ret + r_rto) * glassShatterRisk) + pack;
+
+    var margins = [
+        { label: "Break-Even (0%)", val: 0.00 },
+        { label: "10% Margin", val: 0.10 },
+        { label: "15% Margin", val: 0.15 },
+        { label: "20% Margin", val: 0.20 },
+        { label: "25% Margin", val: 0.25 },
+        { label: "30% Margin", val: 0.30 }
+    ];
+
+    var tableBody = document.getElementById("calc-matrix-rows");
+    tableBody.innerHTML = "";
+
+    margins.forEach(function(m) {
+        var denominator = ((1 - d_pct) * r_del) - m.val;
+        if (denominator <= 0) return;
+
+        // Formula: P = (Expected_Cost - L_ret*r_ret - L_rto*r_rto) / Denominator
+        // Since l_ret is a negative number in the payout log, subtracting it correctly accumulates the cost
+        var numerator = expected_cost - (l_ret * r_ret) - (l_rto * r_rto);
+        var targetListingPrice = numerator / denominator;
+        var expectedBankSettlement = targetListingPrice * (1 - d_pct);
+        var netProfitPerShippedBox = targetListingPrice * m.val;
+
+        var highlightStyle = m.val === 0.25 ? " style='background:#f0fdf4; font-weight:700; color:#059669;'" : "";
+        var labelPrefix = m.val === 0.25 ? "⭐ " : "";
+
+        tableBody.innerHTML += 
+            "<tr" + highlightStyle + ">" +
+                "<td style='padding:0.5rem;'>" + labelPrefix + m.label + "</td>" +
+                "<td style='padding:0.5rem;'><b>₹" + Math.round(targetListingPrice) + "</b></td>" +
+                "<td style='padding:0.5rem;'>₹" + Math.round(expectedBankSettlement) + "</td>" +
+                "<td style='padding:0.5rem; font-weight:600;'>₹" + netProfitPerShippedBox.toFixed(2) + "</td>" +
+            "</tr>";
+    });
+}
 function showApp(){
     if(isPasswordReset)return; // NEVER show app during password reset
     document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData().then(function(){loadPdfHistory();});
