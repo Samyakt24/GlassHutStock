@@ -1836,13 +1836,11 @@ window.handleFileUpload=async function(input){
                 // Final Settlement Amount → received
                 if(hl.includes('final settlement'))cm.received=idx;
 
-                // Total Sale Amount (not return) → amount
-                if(hl==='total sale amount (incl. shipping & gst)')cm.amount=idx;
-                else if(hl.includes('total sale')&&!hl.includes('return')&&cm.amount===undefined)cm.amount=idx;
-                // Fallback: supplier price
-                else if((hl.includes('supplier')&&hl.includes('price'))&&cm.amount===undefined)cm.amount=idx;
-                // Fallback: listing price
-                else if(hl.includes('listing price')&&cm.amount===undefined)cm.listingPrice=idx;
+                // Total Sale Amount (not return) → amount// Map 'amount' strictly to Listing Price for accurate margin calculations
+if(hl.includes('listing price')) {
+    cm.amount = idx;
+    cm.listingPrice = idx;
+}
             });
 
             // If no amount column found, use listing price
