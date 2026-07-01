@@ -1555,7 +1555,7 @@ document.addEventListener('change',function(e){if(e.target.id==='o-item'){var op
 
 // TABS
 // ===== New-listing pricing (data-driven, auto-updates on upload) =====
-var PR_ADS=0.10, PR_PKG=0, PR_BADRET=0, PR_RTODMG=0.25;   // ads baked in; packaging folded into the cost you type; bad customer-return rate unknown (0 for now); ~25% of RTO come back damaged (lost stock)
+var PR_ADS=0.10, PR_PKG=0, PR_BADRET=0.50, PR_RTODMG=0.25;   // ads baked in; packaging folded into the cost you type; ~50% of customer returns come back damaged/unsellable (assumption until tracked); ~25% of RTO come back damaged
 var PR_FALLBACK={Rdel:0.79,Rret:0.09,Rrto:0.12,keepDel:0.889,Sret:-143,Srto:0};
 function prParams(){
     try{
@@ -1616,26 +1616,32 @@ function prCalc(){
     if(bd){
         if(!isFinite(reco)){bd.innerHTML='';}
         else{
-            var Pb=reco;
-            var gross=p.Rdel*Pb, fee=p.Rdel*Pb*(1-p.keepDel),
-                retDrag=-(p.Rret*p.Sret+p.Rrto*p.Srto), ads=PR_ADS*Pb, cost=p.Rdel*C,
-                lostStock=C*(p.Rret*PR_BADRET+p.Rrto*PR_RTODMG),
-                prof=gross-fee-retDrag-ads-cost-lostStock;
-            function line(lbl,amt,sign,strong){
-                return '<div style="display:flex;justify-content:space-between;padding:4px 0;'+(strong?'border-top:1px solid #e5e9f2;margin-top:3px;padding-top:7px;font-weight:800':'')+'">'+
-                    '<span style="color:'+(strong?'#141b2e':'#4a5570')+'">'+lbl+'</span>'+
-                    '<span style="font-weight:'+(strong?800:600)+';color:'+(sign<0?'#d23b3b':(strong?'#0f9d58':'#141b2e'))+'">'+(sign<0?'−':'')+'₹'+Math.round(Math.abs(amt)).toLocaleString('en-IN')+'</span></div>';
+            var Pb=reco, rr=Math.round;
+            // round each component so the column visibly adds up
+            var gross=rr(p.Rdel*Pb), fee=rr(p.Rdel*Pb*(1-p.keepDel)),
+                retDrag=rr(-(p.Rret*p.Sret+p.Rrto*p.Srto)), ads=rr(PR_ADS*Pb),
+                cost=rr(p.Rdel*C), lostStock=rr(C*(p.Rret*PR_BADRET+p.Rrto*PR_RTODMG));
+            var prof=gross-fee-retDrag-ads-cost-lostStock;
+            var retPer=Math.round(Math.abs(p.Sret)), retPct=Math.round(p.Rret*100);
+            function row(lbl,sub,amt,opt){opt=opt||{};
+                var red=amt<0, col=opt.strong?'#0f9d58':(red?'#d23b3b':'#141b2e');
+                return '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:'+(opt.strong?'9px 10px':'6px 10px')+';'+
+                    (opt.strong?'background:#e8f6ee;border-radius:8px;margin-top:6px;':'border-bottom:1px solid #eef1f6;')+'">'+
+                    '<span style="'+(opt.strong?'font-weight:800;color:#141b2e;font-size:0.95rem':'color:#334')+'">'+lbl+
+                        (sub?'<br><span style="font-size:0.66rem;color:#9aa3b5">'+sub+'</span>':'')+'</span>'+
+                    '<span style="font-weight:'+(opt.strong?800:700)+';color:'+col+';font-size:'+(opt.strong?'1.15rem':'0.95rem')+';white-space:nowrap">'+
+                        (red?'−':(opt.strong?'':'+'))+'₹'+Math.abs(amt).toLocaleString('en-IN')+'</span></div>';
             }
-            bd.innerHTML='<div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-weight:700;margin-bottom:4px">Where your money goes at '+money(Pb)+'</div>'+
-                '<div style="font-size:0.68rem;color:#6b7280;margin-bottom:6px">Per unit, averaged across all orders — the '+Math.round((p.Rret+p.Rrto)*100)+'% that come back are why sale value is below your list price.</div>'+
-                '<div style="font-size:0.86rem">'+
-                line('Avg sale value ('+Math.round(p.Rdel*100)+'% deliver)',gross,1,false)+
-                line('Meesho commission &amp; fees',fee,-1,false)+
-                line('Returns &amp; RTO penalties',retDrag,-1,false)+
-                line('Ad spend (~10%)',ads,-1,false)+
-                line('Product cost',cost,-1,false)+
-                line('Damaged/wrong returns (lost stock)',lostStock,-1,false)+
-                line('Your profit / unit',prof,1,true)+
+            bd.innerHTML='<div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:#1e3a5f;font-weight:800;margin-bottom:2px">Where your ₹'+rr(Pb)+' goes</div>'+
+                '<div style="font-size:0.68rem;color:#6b7280;margin-bottom:8px">Per unit, averaged over all orders (the '+Math.round((p.Rret+p.Rrto)*100)+'% that come back drag the average down).</div>'+
+                '<div style="background:#fbfcfe;border:1px solid #e5e9f2;border-radius:10px;padding:4px 4px 8px">'+
+                row('Sale value that actually happens', Math.round(p.Rdel*100)+'% of orders deliver', gross)+
+                row('Meesho commission &amp; fees', 'their cut on delivered orders', -fee)+
+                row('Return &amp; RTO charge', '≈₹'+retPer+' per return × '+retPct+'% of orders', -retDrag)+
+                row('Ad spend', '~10% of the price', -ads)+
+                row('Product cost', 'only on the '+Math.round(p.Rdel*100)+'% that deliver', -cost)+
+                row('Damaged / lost stock', (PR_BADRET===0?'0% now — grows when you log breakage':'broken/wrong items you can\u2019t resell'), -lostStock)+
+                row('Your profit per unit', '', prof, {strong:1})+
                 '</div>';
         }
     }
