@@ -544,6 +544,7 @@
                         </table>
                     </div>
                     <p id="pr-basis" style="font-size:0.72rem;color:#6b7280;margin-top:0.7rem"></p>
+                    <div id="pr-breakdown" style="margin-top:0.8rem;border-top:1px dashed #e5e9f2;padding-top:0.7rem"></div>
                 </div>
             </div>
         </main>
@@ -1610,6 +1611,32 @@ function prCalc(){
     var live=(ordersData&&ordersData.length>=200);
     document.getElementById('pr-basis').innerHTML=(live?'<b>Live from your orders:</b> ':'<b>Using saved averages</b> (upload data to refine): ')+
         Math.round(p.Rdel*100)+'% delivered, '+Math.round((p.Rret+p.Rrto)*100)+'% returned/RTO, keep '+Math.round(p.keepDel*100)+'% on delivery, ~₹'+Math.round(Math.abs(p.Sret))+' lost per return. Refreshes on every upload.';
+    // ---- charges breakdown at the recommended price ----
+    var bd=document.getElementById('pr-breakdown');
+    if(bd){
+        if(!isFinite(reco)){bd.innerHTML='';}
+        else{
+            var Pb=reco;
+            var gross=p.Rdel*Pb, fee=p.Rdel*Pb*(1-p.keepDel),
+                retDrag=-(p.Rret*p.Sret+p.Rrto*p.Srto), ads=PR_ADS*Pb, cost=p.Rdel*C,
+                prof=gross-fee-retDrag-ads-cost;
+            function line(lbl,amt,sign,strong){
+                return '<div style="display:flex;justify-content:space-between;padding:4px 0;'+(strong?'border-top:1px solid #e5e9f2;margin-top:3px;padding-top:7px;font-weight:800':'')+'">'+
+                    '<span style="color:'+(strong?'#141b2e':'#4a5570')+'">'+lbl+'</span>'+
+                    '<span style="font-weight:'+(strong?800:600)+';color:'+(sign<0?'#d23b3b':(strong?'#0f9d58':'#141b2e'))+'">'+(sign<0?'−':'')+'₹'+Math.round(Math.abs(amt)).toLocaleString('en-IN')+'</span></div>';
+            }
+            bd.innerHTML='<div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-weight:700;margin-bottom:4px">Where your money goes at '+money(Pb)+'</div>'+
+                '<div style="font-size:0.68rem;color:#6b7280;margin-bottom:6px">Per unit, averaged across all orders — the '+Math.round((p.Rret+p.Rrto)*100)+'% that come back are why sale value is below your list price.</div>'+
+                '<div style="font-size:0.86rem">'+
+                line('Avg sale value ('+Math.round(p.Rdel*100)+'% deliver)',gross,1,false)+
+                line('Meesho commission &amp; fees',fee,-1,false)+
+                line('Returns &amp; RTO penalties',retDrag,-1,false)+
+                line('Ad spend (~10%)',ads,-1,false)+
+                line('Product cost',cost,-1,false)+
+                line('Your profit / unit',prof,1,true)+
+                '</div>';
+        }
+    }
 }
 (function(){var el=document.getElementById('pr-cost'); if(el)el.addEventListener('input',prCalc);
     var b=document.querySelector('.tab-btn[data-tab="pricing"]'); if(b)b.addEventListener('click',function(){setTimeout(prCalc,30);});
