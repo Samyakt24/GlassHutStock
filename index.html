@@ -282,7 +282,6 @@
             </div>
         </header>
         <nav class="tabs"><div class="tabs-content">
-            <button class="tab-btn" data-tab="pricing">🧮 Pricing</button>
             <button class="tab-btn active" data-tab="dashboard">📊 Dash</button>
             <button class="tab-btn" data-tab="stock">📦 Stock</button>
             <button class="tab-btn" data-tab="orders">🛒 Orders</button>
@@ -290,6 +289,7 @@
             <button class="tab-btn" data-tab="expenses">💰 Expenses</button>
             <button class="tab-btn" data-tab="sku">🏷️ SKU</button>
             <button class="tab-btn" data-tab="labels">📄 Labels</button>
+            <button class="tab-btn" data-tab="pricing">💲 Price</button>
         </div></nav>
         
         <main class="main">
@@ -512,66 +512,40 @@
                 </div>
                 <div id="pdfHistoryList"></div>
             </div>
-            <!-- Paste this right before the closing </main> tag -->
-<div class="tab-content" id="tab-pricing">
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-        
-        <!-- Inputs Box -->
-        <div class="form-box">
-            <h4>🧮 Dynamic Price Planner</h4>
-            <p style="font-size:0.7rem;color:#6b7280;margin-bottom:1rem;">The engine will analyze your live data to factor in your real return penalties, RTO ratios, and platform deductions.</p>
-            
-            <div class="form-group">
-                <label>Product Variant</label>
-                <select id="calc-variant">
-                    <option value="12">12 Chudiyan (Bangles)</option>
-                    <option value="24">24 Chudiyan (Bangles)</option>
-                    <option value="all">Overall / Mixed Catalog</option>
-                </select>
+            <div class="tab-content" id="tab-pricing">
+                <div class="form-box">
+                    <h4>💲 New Listing Price</h4>
+                    <p style="font-size:0.75rem;color:#6b7280;margin-bottom:0.6rem">Enter your cost <b>including the ₹10 packaging</b> (so type ₹60 for a ₹50 item). Meesho fees, returns, RTO and ~10% ad spend are all built in from your own sales data.</p>
+                    <div class="form-group">
+                        <label style="font-size:0.75rem;color:#6b7280;font-weight:600">Product cost price (₹)</label>
+                        <input type="number" id="pr-cost" value="50" min="1" step="1" style="font-size:1.6rem;font-weight:700;padding:0.6rem 0.75rem">
+                    </div>
+                    <div id="pr-hero" style="text-align:center;padding:1.1rem;background:#e8f6ee;border:1px solid #bfe6cd;border-radius:12px;margin-top:0.5rem">
+                        <div style="font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:#0f9d58;font-weight:700">List it at</div>
+                        <div id="pr-reco" style="font-size:2.4rem;font-weight:800;color:#0f9d58;line-height:1.1">₹0</div>
+                        <div id="pr-recoCap" style="font-size:0.8rem;color:#4a5570"></div>
+                    </div>
+                    <div style="text-align:center;font-size:0.85rem;color:#b5761b;background:#fdf5e8;border:1px solid #f0dcb6;border-radius:10px;padding:0.6rem;margin-top:0.6rem">
+                        Never sell below <b id="pr-floor">₹0</b> — that's break-even.
+                    </div>
+                </div>
+                <div class="form-box" style="margin-top:0.75rem">
+                    <h4>📊 Price matrix</h4>
+                    <p style="font-size:0.72rem;color:#6b7280;margin-bottom:0.4rem">Real profit per unit at each price. Returns &amp; fees already taken out. Drop toward the floor if a competitor undercuts you.</p>
+                    <div style="overflow-x:auto">
+                        <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+                            <thead><tr style="border-bottom:2px solid #e5e9f2">
+                                <th style="text-align:left;padding:8px 6px;font-size:0.68rem;text-transform:uppercase;color:#6b7280">List price</th>
+                                <th style="text-align:right;padding:8px 6px;font-size:0.68rem;text-transform:uppercase;color:#6b7280">Profit / unit</th>
+                                <th style="text-align:right;padding:8px 6px;font-size:0.68rem;text-transform:uppercase;color:#6b7280">Margin</th>
+                                <th style="text-align:left;padding:8px 6px;font-size:0.68rem;text-transform:uppercase;color:#6b7280">Level</th>
+                            </tr></thead>
+                            <tbody id="pr-matrix"></tbody>
+                        </table>
+                    </div>
+                    <p id="pr-basis" style="font-size:0.72rem;color:#6b7280;margin-top:0.7rem"></p>
+                </div>
             </div>
-            
-            <div class="form-group">
-                <label>Product Material Cost (COGS) [₹] *</label>
-                <input type="number" id="calc-cogs" placeholder="e.g. 40" min="0">
-            </div>
-            
-            <div class="form-group">
-                <label>Box & Bubble Wrap Cost [₹]</label>
-                <input type="number" id="calc-pack" value="8" min="0">
-            </div>
-            
-            <button class="login-btn" onclick="calculateLivePricing()" style="margin-top: 1rem;">Generate Risk-Adjusted Strategy</button>
-        </div>
-
-        <!-- Account Metrics Learned Box -->
-        <div class="form-box" style="background: #f0f4ff; border-color: #2c5282;">
-            <h4 style="color: #1e3a5f;">📊 Learned Account Metrics</h4>
-            <div id="calc-metrics-report" style="font-size: 0.75rem; color: #374151; line-height: 1.6;">
-                Fill in your costs and hit calculate to view your profile's hidden margins.
-            </div>
-        </div>
-    </div>
-
-    <!-- Pricing Matrix Card -->
-    <div class="card" style="margin-top: 1.5rem;">
-        <div class="card-header">💰 Risk-Adjusted Pricing Matrix</div>
-        <div class="card-body" style="overflow-x: auto;">
-            <table style="width: 100%; text-align: left;">
-                <thead>
-                    <tr style="background: #edf2f9;">
-                        <th style="padding: 0.5rem;">Target Net Margin</th>
-                        <th style="padding: 0.5rem;">Recommended Listing Price</th>
-                        <th style="padding: 0.5rem;">Expected Bank Payout</th>
-                        <th style="padding: 0.5rem;">Net Take-Home Profit / Dispatched Unit</th>
-                    </tr>
-                </thead>
-                <tbody id="calc-matrix-rows">
-                    <tr><td colspan="4" class="empty">Enter product parameters above to calculate.</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
         </main>
     </div>
     
@@ -679,118 +653,6 @@ window.forgotPassword=async function(){
         alert('✅ Password reset link sent to '+email+'\nCheck your inbox!');
     }catch(err){alert('❌ '+err.message);}
 };
-    function calculateLivePricing() {
-    if (!ordersData || ordersData.length === 0) {
-        alert("Please upload or sync your orders data before utilizing the calculator.");
-        return;
-    }
-
-    var variantSelection = document.getElementById("calc-variant").value;
-    var cogs = parseFloat(document.getElementById("calc-cogs").value);
-    var pack = parseFloat(document.getElementById("calc-pack").value) || 0;
-
-    if (isNaN(cogs) || cogs < 0) {
-        alert("Please provide a valid material cost price.");
-        return;
-    }
-
-    // 1. Filter live database by packet config variant string match
-    var targetSubset = ordersData.filter(function(o) {
-        var skuName = (o.remark || o.items || "").toLowerCase();
-        if (variantSelection === "24") return skuName.indexOf("24") !== -1;
-        if (variantSelection === "12") return skuName.indexOf("12") !== -1;
-        return true; 
-    });
-
-    // Fallback if that specific variant hasn't been uploaded yet
-    if (targetSubset.length < 5) { targetSubset = ordersData; }
-
-    // 2. Metrics Accumulation Engine
-    var total = targetSubset.length;
-    var deliveredCount = 0, returnCount = 0, rtoCount = 0;
-    var sumDeliveredListing = 0, sumDeliveredSettlement = 0;
-    var sumReturnSettlement = 0, sumRtoSettlement = 0;
-
-    targetSubset.forEach(function(o) {
-        var status = (o.status || "").toLowerCase();
-        var amt = parseFloat(o.amount) || 0;
-        var recv = parseFloat(o.received) || 0;
-
-        if (status === "delivered") {
-            deliveredCount++;
-            sumDeliveredListing += amt;
-            sumDeliveredSettlement += recv;
-        } else if (status === "return" || status === "exchange") {
-            returnCount++;
-            sumReturnSettlement += recv;
-        } else if (status === "rto") {
-            rtoCount++;
-            sumRtoSettlement += recv;
-        }
-    });
-
-    // 3. Compute Probabilistic Rates
-    var r_del = total > 0 ? (deliveredCount / total) : 0.70;
-    var r_ret = total > 0 ? (returnCount / total) : 0.10;
-    var r_rto = total > 0 ? (rtoCount / total) : 0.10;
-
-    // Platform forward deduction mapping
-    var d_pct = sumDeliveredListing > 0 ? ((sumDeliveredListing - sumDeliveredSettlement) / sumDeliveredListing) : 0.08;
-
-    // Financial impacts
-    var l_ret = returnCount > 0 ? (sumReturnSettlement / returnCount) : -156.00;
-    var l_rto = rtoCount > 0 ? (sumRtoSettlement / rtoCount) : 0.00;
-
-    // 4. Print Dynamic Diagnostic Profile
-    var reportEl = document.getElementById("calc-metrics-report");
-    reportEl.innerHTML = 
-        "📈 <b>Variant Sample Population:</b> " + total + " orders parsed<br>" +
-        "• <b>Real Account Forward Fee:</b> " + (d_pct * 100).toFixed(2) + "% deducted on delivery<br>" +
-        "• <b>Delivery Fulfilment Ratio:</b> " + (r_del * 100).toFixed(1) + "%<br>" +
-        "• <b>Customer Return Overhead:</b> " + (r_ret * 100).toFixed(1) + "%<br>" +
-        "• <b>Courier Return (RTO) Ratio:</b> " + (r_rto * 100).toFixed(1) + "%<br>" +
-        "• <b>Empirical Customer Return Penalty:</b> ₹" + Math.abs(l_ret).toFixed(2) + "<br><br>" +
-        "⚡ <i>The matrices below have automatically priced in a conservative 2% transit breakage risk factor on glass returns.</i>";
-
-    // 5. Generate Pricing Scenarios
-    var glassShatterRisk = 0.02;
-    var expected_cost = (cogs * r_del) + (cogs * (r_ret + r_rto) * glassShatterRisk) + pack;
-
-    var margins = [
-        { label: "Break-Even (0%)", val: 0.00 },
-        { label: "10% Margin", val: 0.10 },
-        { label: "15% Margin", val: 0.15 },
-        { label: "20% Margin", val: 0.20 },
-        { label: "25% Margin", val: 0.25 },
-        { label: "30% Margin", val: 0.30 }
-    ];
-
-    var tableBody = document.getElementById("calc-matrix-rows");
-    tableBody.innerHTML = "";
-
-    margins.forEach(function(m) {
-        var denominator = ((1 - d_pct) * r_del) - m.val;
-        if (denominator <= 0) return;
-
-        // Formula: P = (Expected_Cost - L_ret*r_ret - L_rto*r_rto) / Denominator
-        // Since l_ret is a negative number in the payout log, subtracting it correctly accumulates the cost
-        var numerator = expected_cost - (l_ret * r_ret) - (l_rto * r_rto);
-        var targetListingPrice = numerator / denominator;
-        var expectedBankSettlement = targetListingPrice * (1 - d_pct);
-        var netProfitPerShippedBox = targetListingPrice * m.val;
-
-        var highlightStyle = m.val === 0.25 ? " style='background:#f0fdf4; font-weight:700; color:#059669;'" : "";
-        var labelPrefix = m.val === 0.25 ? "⭐ " : "";
-
-        tableBody.innerHTML += 
-            "<tr" + highlightStyle + ">" +
-                "<td style='padding:0.5rem;'>" + labelPrefix + m.label + "</td>" +
-                "<td style='padding:0.5rem;'><b>₹" + Math.round(targetListingPrice) + "</b></td>" +
-                "<td style='padding:0.5rem;'>₹" + Math.round(expectedBankSettlement) + "</td>" +
-                "<td style='padding:0.5rem; font-weight:600;'>₹" + netProfitPerShippedBox.toFixed(2) + "</td>" +
-            "</tr>";
-    });
-}
 function showApp(){
     if(isPasswordReset)return; // NEVER show app during password reset
     document.getElementById('loginPage').classList.add('hide');document.getElementById('appContainer').classList.add('show');document.getElementById('userEmail').textContent='👤 '+currentUser.email;document.getElementById('o-date').value=new Date().toISOString().split('T')[0];refreshData().then(function(){loadPdfHistory();});
@@ -862,7 +724,7 @@ async function loadOrders(){try{
         if(r.data&&r.data.length>0){allOrders=allOrders.concat(r.data);from+=batchSize;if(r.data.length<batchSize)hasMore=false;}
         else hasMore=false;
     }
-    ordersData=allOrders;renderOrders();renderDashboard();renderMonthly();renderStock();return true;
+    ordersData=allOrders;renderOrders();renderDashboard();renderMonthly();renderStock();try{prCalc();}catch(e){}return true;
 }catch(err){setStatus('❌ '+err.message,'error');return false;}}
 async function loadSkus(){try{var r=await db.from('sku_map').select('*').order('category',{ascending:true});if(r.error){if(r.error.message.includes('does not exist')||r.error.code==='42P01'){skuData=[];renderSkus();document.getElementById('skuContainer').innerHTML='<div class="alert alert-danger">⚠️ Table <b>sku_map</b> not found. Create it in Supabase SQL Editor.</div>';return true;}throw new Error(r.error.message);}skuData=r.data||[];
     // Auto-normalize: fix duplicate categories like "Light Multi-12" vs "Light Multi 12"
@@ -1691,6 +1553,67 @@ function getStockOptions(sel){return'<option value="">--</option>'+stockData.map
 document.addEventListener('change',function(e){if(e.target.id==='o-item'){var opt=e.target.options[e.target.selectedIndex];if(opt.value){document.getElementById('o-size').value=opt.dataset.size;document.getElementById('o-amt').value=opt.dataset.price;}}});
 
 // TABS
+// ===== New-listing pricing (data-driven, auto-updates on upload) =====
+var PR_ADS=0.10, PR_PKG=0, PR_DMG=0;                 // ads baked in; add packaging into the cost you type; breakage unknown
+var PR_FALLBACK={Rdel:0.79,Rret:0.09,Rrto:0.12,keepDel:0.889,Sret:-143,Srto:0};
+function prParams(){
+    try{
+        if(!ordersData||ordersData.length<200) return PR_FALLBACK;
+        var grp={};
+        ordersData.forEach(function(o){
+            var base=(o.order_id||'').toString().split('__')[0];
+            if(!base) return;
+            if(!grp[base]) grp[base]={net:0,sale:0,st:[]};
+            grp[base].net+=(o.received||0);
+            grp[base].sale=Math.max(grp[base].sale,o.amount||0);
+            grp[base].st.push(o.status||'');
+        });
+        function fin(arr){var order=['Return','RTO','Exchange','Delivered','Shipped'];
+            for(var i=0;i<order.length;i++){if(arr.indexOf(order[i])>=0)return order[i];}return '';}
+        var nDel=0,nRet=0,nRto=0,tot=0,saleDel=0,netDel=0,sumRet=0,sumRto=0;
+        Object.keys(grp).forEach(function(k){
+            var g=grp[k],f=fin(g.st);
+            if(!f||f==='Shipped') return;            // skip not-yet-settled
+            tot++;
+            if(f==='Delivered'||f==='Exchange'){nDel++;saleDel+=g.sale;netDel+=g.net;}
+            else if(f==='Return'){nRet++;sumRet+=g.net;}
+            else if(f==='RTO'){nRto++;sumRto+=g.net;}
+        });
+        if(tot<200||saleDel<=0) return PR_FALLBACK;
+        return {Rdel:nDel/tot,Rret:nRet/tot,Rrto:nRto/tot,keepDel:netDel/saleDel,
+            Sret:nRet?sumRet/nRet:PR_FALLBACK.Sret, Srto:nRto?sumRto/nRto:0};
+    }catch(e){return PR_FALLBACK;}
+}
+function prCalc(){
+    var el=document.getElementById('pr-cost'); if(!el) return;
+    var C=parseFloat(el.value)||0, p=prParams();
+    var K=p.Rdel*p.keepDel - PR_ADS;
+    var money=function(n){return '₹'+Math.round(n).toLocaleString('en-IN');};
+    function priceFor(profit){var Cexp=C*p.Rdel+C*(p.Rret+p.Rrto)*PR_DMG+PR_PKG;
+        var drag=p.Rret*p.Sret+p.Rrto*p.Srto; return K>0?(Cexp-drag+profit)/K:Infinity;}
+    function profitAt(P){var Cexp=C*p.Rdel+C*(p.Rret+p.Rrto)*PR_DMG+PR_PKG;
+        return P*K+(p.Rret*p.Sret+p.Rrto*p.Srto)-Cexp;}
+    var floor=priceFor(0), reco=priceFor(0.35*C);
+    document.getElementById('pr-reco').textContent=isFinite(reco)?money(reco):'—';
+    document.getElementById('pr-recoCap').textContent=isFinite(reco)?('≈ '+money(profitAt(reco))+' profit per unit'):'fees exceed any price';
+    document.getElementById('pr-floor').textContent=isFinite(floor)?money(floor):'—';
+    var tiers=[{n:'Floor',m:0},{n:'Competitive',m:0.20},{n:'Recommended',m:0.35,pick:1},{n:'Good',m:0.50},{n:'Premium',m:0.75}];
+    var tb=document.getElementById('pr-matrix'); tb.innerHTML=''; var seen={};
+    tiers.forEach(function(t){var P=priceFor(t.m*C); if(!isFinite(P))return; var k=Math.round(P); if(seen[k])return; seen[k]=1;
+        var pr=profitAt(P), col=pr>=0?'#0f9d58':'#d23b3b', tr=document.createElement('tr');
+        tr.style.borderBottom='1px solid #e5e9f2'; if(t.pick)tr.style.background='#e8f6ee';
+        tr.innerHTML='<td style="padding:9px 6px;font-weight:800;font-size:1.02rem">'+money(P)+'</td>'+
+            '<td style="padding:9px 6px;text-align:right;color:'+col+';font-weight:700">'+money(pr)+'</td>'+
+            '<td style="padding:9px 6px;text-align:right;color:'+col+'">'+Math.round(C>0?pr/C*100:0)+'%</td>'+
+            '<td style="padding:9px 6px">'+t.n+(t.pick?' <span style="font-size:0.62rem;font-weight:700;background:#0f9d58;color:#fff;padding:2px 6px;border-radius:20px">USE</span>':'')+'</td>';
+        tb.appendChild(tr);});
+    var live=(ordersData&&ordersData.length>=200);
+    document.getElementById('pr-basis').innerHTML=(live?'<b>Live from your orders:</b> ':'<b>Using saved averages</b> (upload data to refine): ')+
+        Math.round(p.Rdel*100)+'% delivered, '+Math.round((p.Rret+p.Rrto)*100)+'% returned/RTO, keep '+Math.round(p.keepDel*100)+'% on delivery, ~₹'+Math.round(Math.abs(p.Sret))+' lost per return. Refreshes on every upload.';
+}
+(function(){var el=document.getElementById('pr-cost'); if(el)el.addEventListener('input',prCalc);
+    var b=document.querySelector('.tab-btn[data-tab="pricing"]'); if(b)b.addEventListener('click',function(){setTimeout(prCalc,30);});
+    try{prCalc();}catch(e){}})();
 document.querySelectorAll('.tab-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');document.getElementById('tab-'+btn.dataset.tab).classList.add('active');if(btn.dataset.tab==='stock'){renderInventory();}if(btn.dataset.tab==='sku'){setTimeout(showUnmappedSkus,100);}});});
 document.querySelectorAll('.plat-btn').forEach(function(btn){btn.addEventListener('click',function(){document.querySelectorAll('.plat-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');platform=btn.dataset.p;});});
 document.querySelectorAll('[data-f],[data-s]').forEach(function(btn){btn.addEventListener('click',function(){if(btn.dataset.f){document.querySelectorAll('.filter-btn[data-f]').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');filterPlat=btn.dataset.f;}if(btn.dataset.s){if(btn.classList.contains('active')){btn.classList.remove('active');filterStatus='all';}else{document.querySelectorAll('.filter-btn[data-s]').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');filterStatus=btn.dataset.s;}}renderOrders();});});
@@ -1836,11 +1759,13 @@ window.handleFileUpload=async function(input){
                 // Final Settlement Amount → received
                 if(hl.includes('final settlement'))cm.received=idx;
 
-                // Total Sale Amount (not return) → amount// Map 'amount' strictly to Listing Price for accurate margin calculations
-if(hl.includes('listing price')) {
-    cm.amount = idx;
-    cm.listingPrice = idx;
-}
+                // Total Sale Amount (not return) → amount
+                if(hl==='total sale amount (incl. shipping & gst)')cm.amount=idx;
+                else if(hl.includes('total sale')&&!hl.includes('return')&&cm.amount===undefined)cm.amount=idx;
+                // Fallback: supplier price
+                else if((hl.includes('supplier')&&hl.includes('price'))&&cm.amount===undefined)cm.amount=idx;
+                // Fallback: listing price
+                else if(hl.includes('listing price')&&cm.amount===undefined)cm.listingPrice=idx;
             });
 
             // If no amount column found, use listing price
